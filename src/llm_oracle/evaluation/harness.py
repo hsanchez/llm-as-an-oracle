@@ -54,8 +54,8 @@ class TaskHardnessRecord:
   Attributes:
     task_id:               Task identifier.
     hardness_score:        Composite hardness in [0, 1] (higher = harder).
-    score_variance:        Mean variance of trajectory scores within each
-                           strategy (averaged over both strategies).
+    score_spread:        Mean absolute score difference between verifier and
+                           judge per trajectory (inter-strategy spread).
     strategy_disagreement: Fraction of trajectory pairs on which the two
                            strategies disagree on the better one (0–1).
     avg_confidence:        Mean confidence reported by both strategies (0–1).
@@ -71,7 +71,7 @@ class TaskHardnessRecord:
 
   task_id: str
   hardness_score: float = 0.0
-  score_variance: float = 0.0
+  score_spread: float = 0.0
   strategy_disagreement: float = 0.0
   avg_confidence: float = 1.0
   oracle_gap_verifier: float = 0.0
@@ -300,7 +300,7 @@ class EvaluationHarness:
   hard_task_threshold: float = 0.6
   hardness_weights: dict[str, float] = field(
     default_factory=lambda: {
-      "score_variance": 0.25,
+      "score_spread": 0.25,
       "strategy_disagreement": 0.35,
       "confidence_gap": 0.20,
       "oracle_gap": 0.20,
@@ -466,7 +466,7 @@ class EvaluationHarness:
     confidence_hardness = 1.0 - avg_conf
 
     hardness = (
-      self.hardness_weights["score_variance"] * score_var
+      self.hardness_weights["score_spread"] * score_var
       + self.hardness_weights["strategy_disagreement"] * disagreement
       + self.hardness_weights["confidence_gap"] * confidence_hardness
       + self.hardness_weights["oracle_gap"] * oracle_gap_component
@@ -476,7 +476,7 @@ class EvaluationHarness:
     return TaskHardnessRecord(
       task_id=task.id,
       hardness_score=hardness,
-      score_variance=score_var,
+      score_spread=score_var,
       strategy_disagreement=disagreement,
       avg_confidence=avg_conf,
       oracle_gap_verifier=oracle_gap_v,
@@ -734,7 +734,7 @@ def _validate_hardness_weights(weights: dict[str, float]) -> None:
     ValueError: If weights are invalid.
   """
   required_keys = {
-    "score_variance",
+    "score_spread",
     "strategy_disagreement",
     "confidence_gap",
     "oracle_gap",

@@ -395,7 +395,7 @@ harness = EvaluationHarness(
   max_workers=2,
   hard_task_threshold=0.50,
   hardness_weights={
-    "score_variance": 0.25,
+    "score_spread": 0.25,
     "strategy_disagreement": 0.35,
     "confidence_gap": 0.20,
     "oracle_gap": 0.20,

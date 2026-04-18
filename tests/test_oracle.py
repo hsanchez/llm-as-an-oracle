@@ -963,7 +963,7 @@ class TestEvaluationHarness:
     with pytest.raises(ValueError, match="sum"):
       _validate_hardness_weights(
         {
-          "score_variance": 0.5,
+          "score_spread": 0.5,
           "strategy_disagreement": 0.5,
           "confidence_gap": 0.5,
           "oracle_gap": 0.5,
@@ -971,7 +971,7 @@ class TestEvaluationHarness:
       )
 
     with pytest.raises(ValueError, match="Missing"):
-      _validate_hardness_weights({"score_variance": 1.0})
+      _validate_hardness_weights({"score_spread": 1.0})
 
   def test_task_hardness_record_wins_properties(self) -> None:
     from llm_oracle.evaluation.harness import TaskHardnessRecord

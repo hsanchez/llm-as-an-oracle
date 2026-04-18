@@ -258,7 +258,7 @@ def cmd_compare(args: argparse.Namespace) -> None:
 
   _section("Hardness Metrics")
   _info(f"Composite hardness score   : {record.hardness_score:.4f}")
-  _info(f"Score variance             : {record.score_variance:.4f}")
+  _info(f"Score spread               : {record.score_spread:.4f}")
   _info(f"Strategy disagreement      : {record.strategy_disagreement:.4f}")
   _info(f"Average confidence         : {record.avg_confidence:.4f}")
   _info(f"Oracle gap (verifier)      : {record.oracle_gap_verifier:.4f}")
