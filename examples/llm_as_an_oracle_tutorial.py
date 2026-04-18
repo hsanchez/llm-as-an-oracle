@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 """Jupytext-style tutorial for LLM as an Oracle.
 
-Run as a script:
-    uv run python examples/llm_as_an_oracle_tutorial.py
-
-Or open in a notebook environment that understands ``# %%`` cells.
+Open in a notebook environment that understands ``# %%`` cells.
 
 Prerequisite:
     uv sync
 
 For cell-by-cell execution, make sure your notebook or editor kernel is using
-this project's ``.venv`` so ``from llm_oracle import ...`` resolves normally.
+this project's ``.venv``.
 """
 
 # %% [markdown]
@@ -72,7 +69,30 @@ from llm_oracle import (
 # requiring any external service.
 
 # %% [markdown]
-# ### 1a. Create a deterministic stand-in for a real model
+# ### 1a. Understand the score scale used in this tutorial
+#
+# With `granularity=20`, the verifier-style scoring scale uses the letters
+# `A` through `T`.
+#
+# - `A` is the best score
+# - `T` is the worst score
+# - intermediate letters represent progressively weaker evaluations
+#
+# A rough interpretation is:
+#
+# - `A-D`: strong success
+# - `E-G`: mostly correct, with some issues
+# - `H-J`: uncertain, but leaning toward success
+# - `K-M`: uncertain, but leaning toward failure
+# - `N-P`: significant issues remain
+# - `Q-T`: failure
+#
+# Internally, these letters are ordinal score tokens. The strategies map them
+# onto a numeric scale and then normalize the result to the `[0, 1]` range for
+# reporting.
+
+# %% [markdown]
+# ### 1b. Create a deterministic stand-in for a real model
 #
 # `StubProvider` is a fake language-model provider used for demos and tests.
 # It lets us exercise the full Judge/Verifier/Router API without making network
@@ -96,7 +116,7 @@ from llm_oracle import (
 # wired together.
 
 # %% [markdown]
-# ### 1b. Define the shared scoring configuration and rubric
+# ### 1c. Define the shared scoring configuration and rubric
 #
 # After creating the stub model, we define the evaluation settings that both
 # strategies will share.
@@ -120,7 +140,7 @@ from llm_oracle import (
 # - a natural-language `description`
 # - a `weight` that says how important that criterion is
 #
-# We print a short summary at the end so the audience can confirm the setup
+# We print a short summary at the end to confirm the setup
 # before moving on.
 
 # %%
