@@ -160,8 +160,8 @@ class VerifierStrategy(BaseStrategy):
     # Generate with log probabilities
     text, tokens, position_logprobs = self.model.generate(
       prompt,
-      temperature=self.config.additional_params.get("temperature", 1.0),
-      max_tokens=self.config.additional_params.get("max_tokens", 4096),
+      temperature=self.config.temperature if self.config.temperature is not None else 1.0,
+      max_tokens=self.config.max_tokens if self.config.max_tokens is not None else 4096,
       return_logprobs=True,
     )
 
@@ -210,8 +210,8 @@ class VerifierStrategy(BaseStrategy):
     # Generate with log probabilities
     text, tokens, position_logprobs = self.model.generate(
       prompt,
-      temperature=self.config.additional_params.get("temperature", 1.0),
-      max_tokens=self.config.additional_params.get("max_tokens", 4096),
+      temperature=self.config.temperature if self.config.temperature is not None else 1.0,
+      max_tokens=self.config.max_tokens if self.config.max_tokens is not None else 4096,
       return_logprobs=True,
     )
 

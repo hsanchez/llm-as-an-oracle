@@ -213,8 +213,12 @@ class JudgeStrategy(BaseStrategy):
 
     text, _, _ = self.model.generate(
       prompt,
-      temperature=kwargs.get("temperature", self.config.additional_params.get("temperature", 0.0)),
-      max_tokens=kwargs.get("max_tokens", self.config.additional_params.get("max_tokens", 2048)),
+      temperature=kwargs.get(
+        "temperature", self.config.temperature if self.config.temperature is not None else 0.0
+      ),
+      max_tokens=kwargs.get(
+        "max_tokens", self.config.max_tokens if self.config.max_tokens is not None else 2048
+      ),
       return_logprobs=False,
     )
 
@@ -261,9 +265,11 @@ class JudgeStrategy(BaseStrategy):
     """
     gen_kwargs = {
       "temperature": kwargs.get(
-        "temperature", self.config.additional_params.get("temperature", 0.0)
+        "temperature", self.config.temperature if self.config.temperature is not None else 0.0
       ),
-      "max_tokens": kwargs.get("max_tokens", self.config.additional_params.get("max_tokens", 2048)),
+      "max_tokens": kwargs.get(
+        "max_tokens", self.config.max_tokens if self.config.max_tokens is not None else 2048
+      ),
       "return_logprobs": False,
     }
 

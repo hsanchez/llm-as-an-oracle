@@ -65,12 +65,9 @@ from __future__ import annotations
 
 # ── Core models ───────────────────────────────────────────────────────────────
 from llm_oracle.core.models import (
-  AlignmentStatus,
-  CharInterval,
   CriterionList,
   EvaluationCriterion,
   EvaluationResult,
-  Extraction,
   ModelConfig,
   PairwiseComparison,
   RoutingDecision,
@@ -80,7 +77,6 @@ from llm_oracle.core.models import (
   StrategyType,
   Task,
   TaskDifficulty,
-  TokenInterval,
   Trajectory,
   TrajectoryList,
 )
@@ -137,12 +133,9 @@ __all__ = [
   "__version__",
   "__author__",
   # ── Data models ───────────────────────────────────────────────────────────
-  "AlignmentStatus",
-  "CharInterval",
   "CriterionList",
   "EvaluationCriterion",
   "EvaluationResult",
-  "Extraction",
   "ModelConfig",
   "PairwiseComparison",
   "RoutingDecision",
@@ -152,7 +145,6 @@ __all__ = [
   "StrategyType",
   "Task",
   "TaskDifficulty",
-  "TokenInterval",
   "Trajectory",
   "TrajectoryList",
   # ── Strategy base ─────────────────────────────────────────────────────────

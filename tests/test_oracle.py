@@ -903,22 +903,30 @@ class TestEvaluationHarness:
 
     # When strategies agree on every score, spread = 0 (easy to evaluate).
     r_agree_v = EvaluationResult(
-      "t", StrategyType.VERIFIER, "a",
+      "t",
+      StrategyType.VERIFIER,
+      "a",
       {"a": ScoreResult("a", 0.8), "b": ScoreResult("b", 0.2)},
     )
     r_agree_j = EvaluationResult(
-      "t", StrategyType.JUDGE, "a",
+      "t",
+      StrategyType.JUDGE,
+      "a",
       {"a": ScoreResult("a", 0.8), "b": ScoreResult("b", 0.2)},
     )
     assert _inter_strategy_score_spread(r_agree_v, r_agree_j) == pytest.approx(0.0)
 
     # When strategies maximally disagree on every score, spread = 1 (hard).
     r_disagree_v = EvaluationResult(
-      "t", StrategyType.VERIFIER, "a",
+      "t",
+      StrategyType.VERIFIER,
+      "a",
       {"a": ScoreResult("a", 1.0), "b": ScoreResult("b", 0.0)},
     )
     r_disagree_j = EvaluationResult(
-      "t", StrategyType.JUDGE, "b",
+      "t",
+      StrategyType.JUDGE,
+      "b",
       {"a": ScoreResult("a", 0.0), "b": ScoreResult("b", 1.0)},
     )
     assert _inter_strategy_score_spread(r_disagree_v, r_disagree_j) == pytest.approx(1.0)
@@ -1479,15 +1487,15 @@ class TestOracleRouter:
     decision = router.route(easy_task, trajectories)
     assert len(decision.policy_votes) >= 5
 
-  def test_route_features_match_signals(
+  def test_route_signals_match_task(
     self,
     router: OracleRouter,
     easy_task: Task,
     trajectories: list[Trajectory],
   ) -> None:
     decision = router.route(easy_task, trajectories)
-    assert decision.features["trajectory_count"] == len(trajectories)
-    assert decision.features["has_ground_truth"] == (1.0 if easy_task.ground_truth else 0.0)
+    assert decision.signals.trajectory_count == len(trajectories)
+    assert decision.signals.has_ground_truth == (1.0 if easy_task.ground_truth else 0.0)
 
   def test_route_elapsed_ms_positive(
     self,
@@ -1575,8 +1583,7 @@ class TestOracleRouter:
   ) -> None:
     router.update_hardness(easy_task.id, 0.75)
     decision = router.route(easy_task, trajectories)
-    # The prior_hardness signal should now be 0.75
-    assert decision.features.get("prior_hardness") == pytest.approx(0.75)
+    assert decision.signals.prior_hardness == pytest.approx(0.75)
 
   def test_update_hardness_invalid_raises(self, router: OracleRouter) -> None:
     with pytest.raises(ValueError):
@@ -1821,8 +1828,8 @@ class TestIntegration:
     easy_decision = router.route(easy_task, trajectories)
     hard_decision = router.route(hard_task, trajectories)
 
-    assert easy_decision.features["prior_hardness"] is not None
-    assert hard_decision.features["prior_hardness"] is not None
+    assert easy_decision.signals.prior_hardness is not None
+    assert hard_decision.signals.prior_hardness is not None
     # Routing decisions should be valid strategy types
     assert easy_decision.selected_strategy in {StrategyType.VERIFIER, StrategyType.JUDGE}
     assert hard_decision.selected_strategy in {StrategyType.VERIFIER, StrategyType.JUDGE}

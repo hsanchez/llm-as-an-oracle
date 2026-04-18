@@ -21,6 +21,7 @@ Run
 
 from __future__ import annotations
 
+import dataclasses
 import textwrap
 
 from llm_oracle import (
@@ -473,11 +474,12 @@ print("  Routing decisions (warm — prior hardness available):")
 for task, trajs in tasks_and_trajectories:
   decision = router.route(task, trajs)
   strategy_icon = "🔍" if decision.selected_strategy == StrategyType.VERIFIER else "⚖️ "
+  ph = decision.signals.prior_hardness
   print(
     f"  {strategy_icon} {task.id:<22s}  "
     f"→ {decision.selected_strategy.value:<9s}  "
     f"conf={decision.confidence:.3f}  "
-    f"prior_hardness={decision.features['prior_hardness']:.3f}"
+    + (f"prior_hardness={ph:.3f}" if ph is not None else "prior_hardness=N/A")
   )
 
 # ── Custom routing policy ─────────────────────────────────────────────────────
@@ -561,8 +563,8 @@ print(f"  Confidence   : {decision.confidence:.3f}")
 print(f"  Best traj    : {result.best_trajectory_id}")
 print()
 print("  Signal features:")
-for k, v in sorted(decision.features.items()):
-  print(f"    {k:<35s} : {v}")
+for _f in dataclasses.fields(decision.signals):
+  print(f"    {_f.name:<35s} : {getattr(decision.signals, _f.name)}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

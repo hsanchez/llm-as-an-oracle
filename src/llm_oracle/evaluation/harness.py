@@ -98,9 +98,7 @@ class TaskHardnessRecord:
     """True when both strategies selected the same best trajectory."""
     if self.verifier_result is None or self.judge_result is None:
       return False
-    return (
-      self.verifier_result.best_trajectory_id == self.judge_result.best_trajectory_id
-    )
+    return self.verifier_result.best_trajectory_id == self.judge_result.best_trajectory_id
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -135,9 +133,7 @@ class HarnessReport:
   @property
   def hard_tasks(self) -> list[TaskHardnessRecord]:
     """Tasks whose hardness score exceeds ``hard_task_threshold``."""
-    return [
-      r for r in self.task_records if r.hardness_score >= self.hard_task_threshold
-    ]
+    return [r for r in self.task_records if r.hardness_score >= self.hard_task_threshold]
 
   @property
   def easy_tasks(self) -> list[TaskHardnessRecord]:
@@ -237,8 +233,7 @@ class HarnessReport:
   def per_task_table(self) -> str:
     """Render a per-task breakdown table."""
     header = (
-      f"  {'Task':<30s}  {'Hard':>5s}  {'V-Gap':>6s}  "
-      f"{'J-Gap':>6s}  {'Winner':>9s}  {'Agree':>5s}"
+      f"  {'Task':<30s}  {'Hard':>5s}  {'V-Gap':>6s}  {'J-Gap':>6s}  {'Winner':>9s}  {'Agree':>5s}"
     )
     separator = "  " + "-" * (len(header) - 2)
     rows = [header, separator]
@@ -268,9 +263,7 @@ class HarnessReport:
   def _agreement_rate(self) -> float:
     if not self.task_records:
       return 0.0
-    return sum(1 for r in self.task_records if r.strategies_agree) / len(
-      self.task_records
-    )
+    return sum(1 for r in self.task_records if r.strategies_agree) / len(self.task_records)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -310,13 +303,10 @@ class EvaluationHarness:
   def __post_init__(self) -> None:
     if self.verifier.get_strategy_type() != StrategyType.VERIFIER:
       raise TypeError(
-        f"'verifier' must be a VERIFIER strategy, "
-        f"got {self.verifier.get_strategy_type()}"
+        f"'verifier' must be a VERIFIER strategy, got {self.verifier.get_strategy_type()}"
       )
     if self.judge.get_strategy_type() != StrategyType.JUDGE:
-      raise TypeError(
-        f"'judge' must be a JUDGE strategy, got {self.judge.get_strategy_type()}"
-      )
+      raise TypeError(f"'judge' must be a JUDGE strategy, got {self.judge.get_strategy_type()}")
     _validate_hardness_weights(self.hardness_weights)
 
   # ── Public API ───────────────────────────────────────────────────────────────
@@ -420,8 +410,7 @@ class EvaluationHarness:
     records: list[TaskHardnessRecord] = []
     with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
       futures = {
-        pool.submit(self.run_single, task, trajs): task.id
-        for task, trajs in task_trajectories
+        pool.submit(self.run_single, task, trajs): task.id for task, trajs in task_trajectories
       }
       for future in as_completed(futures):
         records.append(future.result())
@@ -588,9 +577,7 @@ def _oracle_gap(
     return max(0.0, oracle_reward - selected_reward)
 
   # No ground truth: gap is 0 when the selected is already the highest scored.
-  selected_score = scores.get(
-    selected_id, ScoreResult(trajectory_id=selected_id, score=0.0)
-  ).score
+  selected_score = scores.get(selected_id, ScoreResult(trajectory_id=selected_id, score=0.0)).score
   best_score = max(s.score for s in scores.values())
   return max(0.0, best_score - selected_score)
 

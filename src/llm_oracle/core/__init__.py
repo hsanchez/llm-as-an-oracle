@@ -5,12 +5,9 @@ implementations used throughout the system.
 """
 
 from llm_oracle.core.models import (
-  AlignmentStatus,
-  CharInterval,
   CriterionList,
   EvaluationCriterion,
   EvaluationResult,
-  Extraction,
   ModelConfig,
   PairwiseComparison,
   RoutingDecision,
@@ -20,7 +17,6 @@ from llm_oracle.core.models import (
   StrategyType,
   Task,
   TaskDifficulty,
-  TokenInterval,
   Trajectory,
   TrajectoryList,
 )
@@ -39,11 +35,8 @@ from llm_oracle.core.strategy import BaseStrategy, LanguageModel
 
 __all__ = [
   # Models
-  "AlignmentStatus",
-  "CharInterval",
   "EvaluationCriterion",
   "EvaluationResult",
-  "Extraction",
   "ModelConfig",
   "PairwiseComparison",
   "RoutingDecision",
@@ -53,7 +46,6 @@ __all__ = [
   "Task",
   "TaskDifficulty",
   "Trajectory",
-  "TokenInterval",
   "TrajectoryList",
   "CriterionList",
   "ScoreDict",

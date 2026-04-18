@@ -531,7 +531,7 @@ print("Routing decision:")
 print("  selected strategy:", decision.selected_strategy.value)
 print("  confidence:", round(decision.confidence, 4))
 print("  elapsed_ms:", round(decision.elapsed_ms, 3))
-print("  features:", decision.features)
+print("  signals:", decision.signals)
 print("  reasoning:")
 print(decision.reasoning)
 

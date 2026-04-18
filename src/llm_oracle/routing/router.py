@@ -486,8 +486,7 @@ class PriorHardnessPolicy(RoutingPolicy):
         weight=self.weight,
         signals_used=["prior_hardness"],
         reasoning=(
-          f"Prior hardness {hardness:.3f} is low; the judge is "
-          "sufficiently accurate and faster."
+          f"Prior hardness {hardness:.3f} is low; the judge is sufficiently accurate and faster."
         ),
       )
 
@@ -512,9 +511,7 @@ class PriorHardnessPolicy(RoutingPolicy):
       confidence=0.56,
       weight=self.weight,
       signals_used=["prior_hardness"],
-      reasoning=(
-        f"Prior hardness {hardness:.3f} is mid-range; slight verifier preference."
-      ),
+      reasoning=(f"Prior hardness {hardness:.3f} is mid-range; slight verifier preference."),
     )
 
 
@@ -554,8 +551,7 @@ class OutputAvailabilityPolicy(RoutingPolicy):
       weight=self.weight,
       signals_used=["output_available"],
       reasoning=(
-        "No execution outputs available; judge's reasoning over trajectory "
-        "intent is preferred."
+        "No execution outputs available; judge's reasoning over trajectory intent is preferred."
       ),
     )
 
@@ -643,6 +639,16 @@ class PolicyChain:
   def policies(self) -> list[RoutingPolicy]:
     """Read-only view of registered policies."""
     return list(self._policies)
+
+  @property
+  def threshold(self) -> float:
+    """Minimum aggregate confidence required to commit to a strategy."""
+    return self._threshold
+
+  @property
+  def fallback(self) -> StrategyType:
+    """Strategy returned when confidence is below the threshold."""
+    return self._fallback
 
   # ── Private helpers ──────────────────────────────────────────────────────────
 
@@ -774,7 +780,7 @@ class DetailedRoutingDecision(RoutingDecision):
   """
 
   policy_votes: list[PolicyVote] = field(default_factory=list)
-  signals: RoutingSignals | None = None
+  signals: RoutingSignals = field(default_factory=RoutingSignals)
   elapsed_ms: float = 0.0
 
 
@@ -943,9 +949,7 @@ class OracleRouter:
     prior_hardness = self._hardness_cache.get(task.id)
     signals = self._extractor.extract(task, trajectories, prior_hardness=prior_hardness)
 
-    strategy, confidence, votes, reasoning = self._chain.decide(
-      task, trajectories, signals
-    )
+    strategy, confidence, votes, reasoning = self._chain.decide(task, trajectories, signals)
 
     elapsed_ms = (time.perf_counter() - t0) * 1_000
 
@@ -954,17 +958,6 @@ class OracleRouter:
       selected_strategy=strategy,
       confidence=confidence,
       reasoning=reasoning,
-      features={
-        "has_ground_truth": signals.has_ground_truth,
-        "has_test_cases": signals.has_test_cases,
-        "trajectory_count": signals.trajectory_count,
-        "stated_difficulty": signals.stated_difficulty,
-        "verifiable_keyword_density": signals.verifiable_keyword_density,
-        "judgement_keyword_density": signals.judgement_keyword_density,
-        "problem_length": signals.problem_length,
-        "output_available": signals.output_available,
-        "prior_hardness": signals.prior_hardness,
-      },
       policy_votes=votes,
       signals=signals,
       elapsed_ms=elapsed_ms,
@@ -1026,8 +1019,8 @@ class OracleRouter:
 
     self._chain = PolicyChain(
       policies,
-      confidence_threshold=self._chain._threshold,
-      fallback_strategy=self._chain._fallback,
+      confidence_threshold=self._chain.threshold,
+      fallback_strategy=self._chain.fallback,
     )
     return self
 
@@ -1083,9 +1076,7 @@ class OracleRouter:
       "  " + "-" * 50,
     ]
     for d in self._decision_log:
-      lines.append(
-        f"  {d.task_id:<30s}  {d.selected_strategy.value:>9s}  {d.confidence:>6.3f}"
-      )
+      lines.append(f"  {d.task_id:<30s}  {d.selected_strategy.value:>9s}  {d.confidence:>6.3f}")
     lines += ["═" * 56, ""]
     return "\n".join(lines)
 

@@ -21,15 +21,6 @@ class TaskDifficulty(enum.Enum):
   UNKNOWN = "unknown"
 
 
-class AlignmentStatus(enum.Enum):
-  """Status of extraction alignment with source text."""
-
-  MATCH_EXACT = "match_exact"
-  MATCH_FUZZY = "match_fuzzy"
-  MATCH_LESSER = "match_lesser"
-  NO_MATCH = "no_match"
-
-
 class StrategyType(enum.Enum):
   """Types of evaluation strategies."""
 
@@ -176,7 +167,6 @@ class RoutingDecision:
     selected_strategy: Strategy type selected
     confidence: Confidence in the routing decision
     reasoning: Explanation for the decision
-    features: Features extracted for routing decision
     metadata: Additional routing metadata
   """
 
@@ -184,59 +174,7 @@ class RoutingDecision:
   selected_strategy: StrategyType
   confidence: float
   reasoning: str
-  features: dict[str, Any] = field(default_factory=dict)
   metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class TokenInterval:
-  """Token-based interval in text.
-
-  Attributes:
-    start_index: Starting token index (inclusive)
-    end_index: Ending token index (exclusive)
-  """
-
-  start_index: int
-  end_index: int
-
-
-@dataclass
-class CharInterval:
-  """Character-based interval in text.
-
-  Attributes:
-    start_pos: Starting character position (inclusive)
-    end_pos: Ending character position (exclusive)
-  """
-
-  start_pos: int
-  end_pos: int
-
-
-@dataclass
-class Extraction:
-  """Represents an extracted entity from text.
-
-  Attributes:
-    extraction_class: Type/class of the extraction
-    extraction_text: The extracted text content
-    extraction_index: Position index in sequence
-    group_index: Group index for batched extractions
-    token_interval: Token-level position in source
-    char_interval: Character-level position in source
-    alignment_status: How well aligned with source text
-    attributes: Additional extraction attributes
-  """
-
-  extraction_class: str
-  extraction_text: str
-  extraction_index: int
-  group_index: int = 0
-  token_interval: TokenInterval | None = None
-  char_interval: CharInterval | None = None
-  alignment_status: AlignmentStatus | None = None
-  attributes: dict[str, Any] | None = None
 
 
 @dataclass
@@ -273,7 +211,9 @@ class ScoringConfig:
     enable_fuzzy_alignment: Enable fuzzy text alignment
     fuzzy_threshold: Threshold for fuzzy matching
     use_logprobs: Use log probabilities for scoring
-    additional_params: Strategy-specific parameters (e.g., temperature, max_tokens)
+    temperature: Sampling temperature passed to the model (None = strategy default)
+    max_tokens: Maximum tokens in model response (None = strategy default)
+    additional_params: Strategy-specific parameters not covered by named fields
   """
 
   granularity: int = 20
@@ -282,6 +222,8 @@ class ScoringConfig:
   enable_fuzzy_alignment: bool = True
   fuzzy_threshold: float = 0.75
   use_logprobs: bool = True
+  temperature: float | None = None
+  max_tokens: int | None = None
   additional_params: dict[str, Any] = field(default_factory=dict)
 
 
