@@ -22,6 +22,12 @@ dev = [
   "pytest-asyncio>=0.23",
 ]
 
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+]
+
 [project.scripts]
 llm-oracle = "llm_oracle.__main__:main"
 

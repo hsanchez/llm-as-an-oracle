@@ -26,6 +26,36 @@ This repository therefore treats `LLM-as-an-Oracle` as an orchestration layer:
 - it compares them in a shared evaluation harness
 - it routes tasks to one or the other based on task signals
 
+## Evaluation Metrics
+
+This project has two layers of evaluation metrics.
+
+- Strategy-level metrics answer: "How did a given evaluator score and rank the trajectories?"
+- Harness-level metrics answer: "How well did Judge and Verifier perform relative to each other and to oracle-best selection?"
+
+At the strategy level, `JudgeStrategy` and `VerifierStrategy` produce:
+
+- `score`: normalized trajectory score in `[0, 1]`
+- `criterion_scores`: per-criterion score breakdown
+- `best_trajectory_id`: the selected best trajectory
+- `pairwise_comparisons`: head-to-head comparisons when applicable
+- `confidence`: confidence attached to scores and pairwise decisions
+
+At the harness level, `EvaluationHarness` computes:
+
+- `verifier_accuracy` and `judge_accuracy`: whether each strategy selected the oracle-best trajectory
+- `oracle_gap_verifier` and `oracle_gap_judge`: how far each selected trajectory is from the oracle-best one
+- `score_spread`: absolute score difference between Judge and Verifier on shared trajectories
+- `strategy_disagreement`: fraction of trajectory pairs ranked differently by the two strategies
+- `avg_confidence`: average confidence across both strategies
+- `hardness_score`: weighted composite of score spread, disagreement, inverted confidence, and oracle gap
+- `elapsed_verifier_s` and `elapsed_judge_s`: runtime per strategy
+
+If you are explaining the system to users, persist this split in two places:
+
+- the README, for the canonical high-level explanation
+- tutorials/examples, for audience-facing explanation right where the metrics appear
+
 ## Glossary
 
 - `Trajectory`: a candidate task-solving attempt, including the model's produced solution and any associated outputs or intermediate steps used for evaluation.
@@ -48,3 +78,18 @@ uv run python main.py compare --task "Explain merge sort" --trajectories 3
 # Run the test suite (148 tests)
 uv run python main.py test
 ```
+
+## Development Setup
+
+```bash
+uv sync
+```
+
+This repository uses a local `.venv`. If your editor reports imports like
+`pytest` as unresolved, make sure it is using:
+
+```bash
+.venv/bin/python
+```
+
+The workspace is configured for VS Code / Cursor to prefer that interpreter.
