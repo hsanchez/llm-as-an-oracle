@@ -18,13 +18,20 @@ In practice, these approaches are best treated as complementary:
 
 - Use `Judge` when evaluation is open-ended, rubric-based, holistic, or subjective.
 - Use `Verifier` when evaluation can be grounded in stronger evidence such as reference solutions, test cases, expected outputs, or execution results.
-- Use `Oracle` when you want a system that can route between them and apply the better evaluation mode for the task.
+- Use the `Oracle` layer when you want an evaluation orchestrator that routes between Judge and Verifier and selects the better evaluation mode for the task.
 
 This repository therefore treats `LLM-as-an-Oracle` as an orchestration layer:
 
 - it exposes both `Judge` and `Verifier`
 - it compares them in a shared evaluation harness
 - it routes tasks to one or the other based on task signals
+
+## Glossary
+
+- `Trajectory`: a candidate task-solving attempt, including the model's produced solution and any associated outputs or intermediate steps used for evaluation.
+- `Judge`: an evaluator that scores or ranks trajectories holistically, usually with rubric-based or preference-based reasoning.
+- `Verifier`: an evaluator that scores trajectories using a more structured verification process, often grounded in criteria decomposition, repeated verification, reference solutions, test cases, or execution evidence.
+- `Oracle`: the orchestration layer that routes between Judge and Verifier and selects the better evaluation mode for the task.
 
 ## CLI USAGE
 
