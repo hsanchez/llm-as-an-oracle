@@ -10,6 +10,11 @@ Key characteristics:
   - Positional-bias mitigation via score normalization across swap orderings
   - Reference-guided and reference-free modes
   - Criteria aggregation via weighted rubric scoring
+
+Reference:
+  Zheng, L., Chiang, W.-L., Sheng, Y., et al. (2023). Judging LLM-as-a-Judge
+  with MT-Bench and Chatbot Arena. arXiv:2306.05685.
+  https://arxiv.org/abs/2306.05685
 """
 
 from __future__ import annotations

@@ -520,7 +520,7 @@ for trajectory_id, score_result in sorted(
 # - `selected_strategy`: Judge or Verifier
 # - `confidence`: how strongly the router prefers that choice
 # - `elapsed_ms`: routing overhead
-# - `features`: the extracted signals used by the policy chain
+# - `signals`: the extracted routing signals used by the policy chain
 # - `reasoning`: a textual explanation of the decision
 
 # %%

@@ -4,6 +4,10 @@ This module implements the LLM-as-a-Verifier approach, which uses fine-grained
 scoring with log probabilities, repeated verification, and criteria decomposition
 to evaluate trajectories. It achieves higher accuracy than traditional judge
 approaches by scaling scoring granularity and using pairwise tournament selection.
+
+Reference:
+  LLM-as-a-Verifier project (Notion write-up + reference implementation).
+  https://llm-as-a-verifier.notion.site/
 """
 
 from __future__ import annotations
