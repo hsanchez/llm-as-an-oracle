@@ -462,7 +462,7 @@ class PriorHardnessPolicy(RoutingPolicy):
   """
 
   name = "prior_hardness"
-  weight = 1.8  # High weight — this is the most informative signal.
+  weight = 1.8  # Second-highest weight after GroundTruthPolicy (2.0).
 
   def vote(
     self,
