@@ -26,6 +26,35 @@ This repository therefore treats `LLM-as-an-Oracle` as an orchestration layer:
 - it compares them in a shared evaluation harness
 - it routes tasks to one or the other based on task signals
 
+## How the Oracle Works
+
+`OracleRouter` is a deterministic routing layer that decides whether a task
+should be evaluated by `VerifierStrategy` or `JudgeStrategy`.
+
+At a high level, the algorithm does four things:
+
+1. Extract routing signals from the task and trajectories.
+2. Ask a small set of routing policies to cast weighted votes.
+3. Aggregate the votes into Judge-vs-Verifier confidence scores.
+4. Select the winning strategy, or fall back to `Judge` if confidence is too low.
+
+The default router uses these signals:
+
+- presence of `ground_truth`
+- presence of `test_cases`
+- keyword evidence for verifiable vs open-ended tasks
+- stated task difficulty
+- whether execution output is available
+- number of candidate trajectories
+- optional prior hardness from the evaluation harness
+
+The routing process is fully auditable. Each decision includes the extracted
+signals, each policy's vote, the final confidence, and a human-readable
+reasoning trace.
+
+For the full algorithm and policy details, see
+[`docs/oracle-algorithm.md`](docs/oracle-algorithm.md).
+
 ## Evaluation Metrics
 
 This project has two layers of evaluation metrics.

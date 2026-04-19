@@ -406,6 +406,10 @@ for trajectory_id, score_result in sorted(
 # - difficulty
 # - execution output
 # - trajectory count
+#
+# The canonical algorithm description lives in `docs/oracle-algorithm.md`.
+# This tutorial focuses on how to use the router rather than specifying the
+# routing logic in full.
 
 # %% [markdown]
 # ### 5a. Build the default Oracle router and inspect its routing decision
