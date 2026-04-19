@@ -30,20 +30,32 @@ It works in four stages.
 Input: Task + Trajectories
             |
             v
-+-------------------- LLM-as-an-Oracle --------------------+
-|                                                          |
-|                  SignalExtractor                         |
-|                        |                                 |
-|                        v                                 |
-|                       Router                             |
-|                      /      \                            |
-|               Verifier      Judge                        |
-|                                                          |
-+----------------------------------------------------------+
-            |
-            v
-Output: EvaluationResult + DetailedRoutingDecision
++----------------------- LLM-as-an-Oracle -----------------------+
+|                                                               |
+|  1. SignalExtractor ──► RoutingSignals                        |
+|                               |                               |
+|  2.             PolicyChain (6 policies, weighted votes)      |
+|                               |                               |
+|  3.          verifier_total vs judge_total                    |
+|                               |                               |
+|  4.      confidence ≥ 0.60? ──no──► Judge (fallback)         |
+|                    |                                          |
+|                   yes                                         |
+|             ┌─────┴─────┐                                     |
+|          Verifier      Judge  (winning strategy only)         |
++-------------|-------------|------------------------------------|
+              └──────┬──────┘
+                     v
+       EvaluationResult + DetailedRoutingDecision
 ```
+
+The router first extracts structured signals from the task and trajectories
+(step 1), then runs a fixed chain of six deterministic policies that each cast
+a weighted vote for `Verifier` or `Judge` (step 2). Those votes are aggregated
+into a confidence score for each side (step 3). If the winning side clears the
+0.60 threshold the corresponding strategy is selected; otherwise the router
+falls back to `Judge` (step 4). Only the selected strategy runs — the other is
+never invoked.
 
 ### 1. Extract routing signals
 
