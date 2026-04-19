@@ -2,9 +2,9 @@
 
 This document defines what `LLM-as-an-Oracle` means in this repository.
 
-In this codebase, the Oracle is not a third evaluator. It is a routing layer
-that decides whether a task should be evaluated by `VerifierStrategy` or
-`JudgeStrategy`.
+In this codebase, the Oracle is not a third evaluator. It is the routing
+process that decides whether a task should be evaluated by `VerifierStrategy`
+or `JudgeStrategy`.
 
 ## Purpose
 
@@ -54,8 +54,8 @@ The router first extracts structured signals from the task and trajectories
 a weighted vote for `Verifier` or `Judge` (step 2). Those votes are aggregated
 into a confidence score for each side (step 3). If the winning side clears the
 0.60 threshold the corresponding strategy is selected; otherwise the router
-falls back to `Judge` (step 4). Only the selected strategy runs — the other is
-never invoked.
+falls back to `Judge` (step 4). Only the selected strategy runs; the other
+branch is never invoked.
 
 ### 1. Extract routing signals
 
