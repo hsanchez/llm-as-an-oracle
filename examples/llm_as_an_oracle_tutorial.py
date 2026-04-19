@@ -110,17 +110,35 @@ stub = StubProvider(
   default_score="C",
   default_score_a="C",
   default_score_b="H",
+  # `responses` is what makes the stub produce a believable ranking
+  # instead of a flat tie.
   responses=[
-    # TODO: describe the responses and their scores
-    StubResponse(score="B", score_a="B", score_b="G"),  # TODO: is this verifier-optimistic?
-    StubResponse(score="C", score_a="C", score_b="H"),  # TODO: is this verifier-neutral?
-    StubResponse(score="A", score_a="A", score_b="F"),  # TODO: is this judger-optimistic?
-    StubResponse(score="D", score_a="B", score_b="J"),  # TODO: is this judger-neutral?
+    # Responses are consumed in round-robin order. On the A-T scale A is best,
+    # T is worst. The Verifier reads the logprob distribution peaked at the
+    # letter token: the letter sets the score level and the gap between score_a
+    # and score_b sets how confidently it picks a tournament winner. The Judge
+    # expects numeric tokens; letters never match its regex, so it always falls
+    # back to the scale midpoint (5.5 → 0.5 normalised) regardless of these values.
+    StubResponse(
+      score="B", score_a="B", score_b="G"
+    ),  # verifier: near-top score, 5-letter gap → clear winner
+    StubResponse(
+      score="C", score_a="C", score_b="H"
+    ),  # verifier: high score, 5-letter gap → clear winner
+    StubResponse(
+      score="A", score_a="A", score_b="F"
+    ),  # verifier: top score, 5-letter gap → clear winner
+    StubResponse(
+      score="D", score_a="B", score_b="J"
+    ),  # verifier: good score, 8-letter gap → widest margin
   ],
   seed=7,
 )
 
-# TODO: describe the scoring config and its parameters
+# granularity=20 means a 20-level A-T scoring scale.
+# num_verifications=2 means each criterion is scored twice and averaged (K=2).
+# use_logprobs=True lets the Verifier read the token probability distribution
+# rather than parsing a single score token from the text.
 config = ScoringConfig(
   granularity=20,
   num_verifications=2,
@@ -129,7 +147,9 @@ config = ScoringConfig(
 )
 
 criteria = [
-  # TODO: describe each criterion and its weight
+  # weight controls how much each criterion contributes to the overall score.
+  # Higher weight = more influence. Completeness and Accuracy are weighted
+  # equally here and together outweigh Clarity 2:1.
   EvaluationCriterion(
     id="completeness",
     name="Completeness",
