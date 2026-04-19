@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 # %% [markdown]
 # # LLM as an Oracle: Tutorial
 #
@@ -17,8 +18,7 @@
 # %% [markdown]
 # ## 0. Import the public API
 #
-# This tutorial imports everything from the top-level `llm_oracle` package
-# rather than from internal modules. That is the intended user-facing API.
+# This tutorial imports only the user-facing API.
 #
 # The imported names fall into a few groups:
 #
@@ -54,7 +54,7 @@ from llm_oracle import (
 # - a scoring configuration
 # - a list of evaluation criteria
 #
-# For a tutorial, `StubProvider` is ideal because it exercises the API without
+# For this tutorial we use `StubProvider` because it exercises the API without
 # requiring any external service.
 
 # %% [markdown]
@@ -276,9 +276,17 @@ print("Trajectories:", [trajectory.id for trajectory in trajectories])
 # The result includes `score`, `confidence`, and `criterion_scores`.
 
 # %%
-verifier = VerifierStrategy(stub, config, criteria)
+verifier = VerifierStrategy(
+  stub,  # LLM Provider
+  config,  # Scoring Config
+  criteria,  # Evaluation Criteria (Rubric)
+)
 
-single_verifier_score = verifier.score_trajectory(task, trajectories[0], criteria[0])
+single_verifier_score = verifier.score_trajectory(
+  task,  # Task to evaluate
+  trajectories[0],  # Trajectory to score
+  criteria[0],  # Criterion to score against
+)
 print("Single verifier score:")
 print("  trajectory:", single_verifier_score.trajectory_id)
 print("  score:", round(single_verifier_score.score, 4))
