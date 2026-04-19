@@ -1,0 +1,36 @@
+.reveal {
+  font-size: 22px;
+}
+
+.reveal .slides section {
+  overflow-y: auto;
+  max-height: 80vh;
+}
+
+.reveal h2 {
+  text-align: left;
+  font-size: 1.4em;
+}
+
+.reveal p,
+.reveal li {
+  text-align: left;
+}
+
+.reveal ul,
+.reveal ol {
+  display: block;
+  text-align: left;
+}
+
+.reveal ul {
+  list-style: disc;
+}
+
+.reveal ol {
+  list-style: decimal;
+}
+
+.reveal ul ul {
+  list-style: circle;
+}
