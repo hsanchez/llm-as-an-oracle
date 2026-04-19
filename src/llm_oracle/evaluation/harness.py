@@ -548,13 +548,9 @@ def _oracle_gap(
 ) -> float:
   """Compute the normalized reward gap between oracle-best and selected-best.
 
-  When ground-truth rewards exist, the gap is measured in reward space so that
-  a strategy that picks the wrong trajectory produces a non-zero gap.  Comparing
-  strategy scores directly collapses the gap to zero whenever the strategy is
-  self-consistent (selected_score is always the maximum strategy score).
-
-  When no oracle is available (no ground-truth rewards), falls back to comparing
-  strategy scores from the result.
+  Uses reward space when ground-truth rewards exist (strategy scores alone
+  collapse the gap to zero for self-consistent strategies).  Falls back to
+  comparing strategy scores when no oracle is available.
 
   Args:
     oracle_id:    Ground-truth best trajectory ID (may be ``None``).
@@ -588,11 +584,9 @@ def _inter_strategy_score_spread(
 ) -> float:
   """Compute mean absolute score difference between strategies per trajectory.
 
-  For each trajectory scored by both strategies, this measures how far apart
-  their absolute scores are.  High spread means the two evaluators disagree on
-  how good each trajectory is, which signals an evaluation-hard task.  This is
-  complementary to :func:`_pairwise_disagreement`, which only captures ranking
-  disagreement, not magnitude disagreement.
+  High spread signals an evaluation-hard task (strategies disagree on absolute
+  quality, not just ranking — see :func:`_pairwise_disagreement` for the
+  ranking-only variant).
 
   Args:
     verifier_result: Verifier evaluation result.

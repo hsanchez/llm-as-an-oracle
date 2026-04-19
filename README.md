@@ -51,11 +51,6 @@ At the harness level, `EvaluationHarness` computes:
 - `hardness_score`: weighted composite of score spread, disagreement, inverted confidence, and oracle gap
 - `elapsed_verifier_s` and `elapsed_judge_s`: runtime per strategy
 
-If you are explaining the system to users, persist this split in two places:
-
-- the README, for the canonical high-level explanation
-- tutorials/examples, for audience-facing explanation right where the metrics appear
-
 ## Glossary
 
 - `Trajectory`: a candidate task-solving attempt, including the model's produced solution and any associated outputs or intermediate steps used for evaluation.

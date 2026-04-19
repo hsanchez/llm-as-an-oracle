@@ -51,9 +51,8 @@ class LanguageModel(Protocol):
 class BaseStrategy(abc.ABC):
   """Abstract base class for evaluation strategies.
 
-  This class defines the interface that all evaluation strategies must implement,
-  including verifiers and judges. Strategies are responsible for scoring
-  trajectories and selecting the best one for a given task.
+  Subclasses implement scoring and selection for a specific evaluation approach
+  (verifier or judge).
   """
 
   def __init__(

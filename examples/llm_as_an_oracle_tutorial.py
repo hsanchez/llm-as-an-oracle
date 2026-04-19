@@ -83,54 +83,22 @@ from llm_oracle import (
 # %% [markdown]
 # ### 1b. Create a deterministic stand-in for a real model
 #
-# `StubProvider` is a fake language-model provider used for demos and tests.
-# It lets us exercise the full Judge/Verifier/Router API without making network
-# calls or requiring API keys.
-#
-# In this example:
-#
-# - `model_id` is just a display name so we can identify the provider in logs
-#   and printed output.
-# - `default_score` is the fallback single-score grade returned when a strategy
-#   asks for one score and the scripted responses run out.
-# - `default_score_a` and `default_score_b` are fallback pairwise grades for
-#   comparisons between two candidate trajectories.
-# - `responses` is a scripted sequence of `StubResponse` objects. Each call to
-#   the provider consumes the next response, which makes the tutorial
-#   deterministic and repeatable.
-# - `seed` fixes any randomized behavior inside the stub so the demo is stable.
-#
-# The exact letter grades are not important here. What matters is that the
-# tutorial has predictable model outputs, so we can focus on how the library is
-# wired together.
+# `StubProvider` exercises the full API without network calls or API keys.
+# `responses` is consumed in order, making the tutorial deterministic. Setting
+# all three score fields on each `StubResponse` lets it handle both
+# single-trajectory and pairwise prompts — the provider picks the right field
+# at call time. Unset fields fall back to the `default_score*` values.
 
 # %% [markdown]
 # ### 1c. Define the shared scoring configuration and rubric
 #
-# After creating the stub model, we define the evaluation settings that both
-# strategies will share.
+# `ScoringConfig` is shared by both strategies. `criteria` is the rubric each
+# evaluator scores against — each entry has an `id`, `name`, `description`,
+# and `weight`.
 #
-# - `ScoringConfig` controls how fine-grained and how repeated the evaluation
-#   process should be.
-# - `granularity=20` means the internal scoring scale is fairly fine rather than
-#   extremely coarse.
-# - `num_verifications=2` tells the verifier-oriented path to repeat parts of
-#   its evaluation more than once.
-# - `num_criteria=3` matches the three rubric dimensions we define below.
-# - `use_logprobs=True` enables confidence-aware behavior when a provider
-#   supports log probabilities. With the stub, this mainly keeps the example
-#   aligned with the real API.
-#
-# The `criteria` list is the rubric shared by Judge and Verifier. Each
-# `EvaluationCriterion` has:
-#
-# - an internal `id`
-# - a human-readable `name`
-# - a natural-language `description`
-# - a `weight` that says how important that criterion is
-#
-# We print a short summary at the end to confirm the setup
-# before moving on.
+# > **Note:** `use_logprobs=True` tells the Verifier to extract token-level log
+# > probabilities from the model response — the mechanism it uses to achieve
+# > finer score discrimination between close candidates.
 
 # %%
 stub = StubProvider(
@@ -198,23 +166,11 @@ print("Criteria:", [criterion.name for criterion in criteria])
 # %% [markdown]
 # ### 2a. Build one verifiable task and three candidate solutions
 #
-# This cell creates the concrete data that the rest of the tutorial evaluates.
+# Three trajectories give the evaluators something to rank:
 #
-# The `Task` represents a binary-search programming problem. It includes:
-#
-# - `description` and `problem_statement` so the evaluator knows the task
-# - `ground_truth`, which gives the verifier a strong reference solution
-# - `test_cases`, which provide executable-style evidence
-# - `difficulty`, which the router may use as a signal
-#
-# Then we create three `Trajectory` objects:
-#
-# - `traj-correct`: a proper binary-search implementation
-# - `traj-linear`: correct behavior, but the wrong algorithmic idea
-# - `traj-buggy`: an implementation with a boundary-condition bug
-#
-# This mix is intentional. It gives the Judge and Verifier something meaningful
-# to separate: correctness, efficiency, and failure cases.
+# - `traj-correct`: proper binary search
+# - `traj-linear`: correct output, wrong algorithm
+# - `traj-buggy`: boundary-condition bug
 
 # %%
 task = Task(
@@ -316,21 +272,8 @@ print("Trajectories:", [trajectory.id for trajectory in trajectories])
 # %% [markdown]
 # ### 3a. Instantiate the Verifier and score one trajectory
 #
-# Here we build a `VerifierStrategy` using the shared `stub`, `config`, and
-# `criteria`.
-#
-# Then we call `score_trajectory(...)` on just one candidate and one criterion:
-# `criteria[0]`, which is `Correctness`.
-#
-# This is the smallest useful verifier example. It answers:
-# "How does the verifier score this one trajectory on this one rubric
-# dimension?"
-#
-# In the printed output, pay attention to:
-#
-# - `score`: the normalized numeric grade
-# - `confidence`: how certain the evaluator is
-# - `criterion_scores`: the breakdown by rubric criterion
+# `score_trajectory` scores a single candidate against one criterion.
+# The result includes `score`, `confidence`, and `criterion_scores`.
 
 # %%
 verifier = VerifierStrategy(stub, config, criteria)
@@ -346,19 +289,8 @@ print("  criterion_scores:", single_verifier_score.criterion_scores)
 # %% [markdown]
 # ### 3b. Compare two trajectories head-to-head with the Verifier
 #
-# Scoring one trajectory is useful, but many ranking problems are really about
-# choosing between candidates.
-#
-# This cell compares:
-#
-# - trajectory A: the correct binary-search solution
-# - trajectory B: the buggy solution
-#
-# We again focus on the `Correctness` criterion to keep the example simple.
-#
-# The result reports separate scores for A and B, a winner, and a confidence
-# value. This is a good cell to pause on during the demo because it shows the
-# library can do pairwise preference judgments, not just absolute scoring.
+# `compare_trajectories` does a pairwise comparison on one criterion and returns
+# separate scores for A and B, a winner, and a confidence value.
 
 # %%
 pairwise_verifier = verifier.compare_trajectories(
@@ -378,18 +310,8 @@ print("  confidence:", round(pairwise_verifier.confidence, 4))
 # %% [markdown]
 # ### 3c. Evaluate the full candidate set with the Verifier
 #
-# This cell runs the Verifier over the full list of trajectories and produces an
-# `EvaluationResult`.
-#
-# That object includes:
-#
-# - `best_trajectory_id`: the overall winner
-# - `strategy_type`: which evaluator produced the result
-# - `metadata`: additional diagnostic information
-# - `trajectory_scores`: the per-trajectory score table
-#
-# The loop at the end sorts candidates from best to worst so the ranking is easy
-# to read live.
+# `evaluate` returns an `EvaluationResult` with `best_trajectory_id`,
+# `strategy_type`, `metadata`, and a per-trajectory `trajectory_scores` table.
 
 # %%
 verifier_result = verifier.evaluate(task, trajectories)
@@ -416,18 +338,9 @@ for trajectory_id, score_result in sorted(
 # %% [markdown]
 # ### 4a. Instantiate the Judge and score one trajectory
 #
-# The `JudgeStrategy` uses the same task, trajectories, and rubric, but its
-# style is more holistic than the Verifier's evidence-heavy approach.
-#
-# A few Judge-specific options appear here:
-#
-# - `score_min` and `score_max` define the scoring range
-# - `swap_pairwise=True` allows the implementation to compare candidates in both
-#   orders to reduce position bias
-# - `reasoning_depth="detailed"` asks for richer judge reasoning
-#
-# As with the Verifier, we start with a single-trajectory score before moving to
-# a full ranking.
+# Judge-specific options: `score_min`/`score_max` set the numeric range,
+# `swap_pairwise` reduces position bias, `reasoning_depth` controls output
+# verbosity.
 
 # %%
 judge = JudgeStrategy(
@@ -451,17 +364,9 @@ print("  criterion_scores:", single_judge_score.criterion_scores)
 # %% [markdown]
 # ### 4b. Rank the full candidate set with the Judge
 #
-# This mirrors the earlier Verifier evaluation, but now the Judge is producing
-# the ranking.
-#
-# Running both paths on the same task is useful because it makes the conceptual
-# difference concrete:
-#
-# - the Verifier leans on evidence such as tests and reference answers
-# - the Judge applies a more holistic scoring process
-#
-# Comparing their outputs side by side prepares us for the Oracle router, whose
-# job is to choose between these strategies automatically.
+# Same call as the Verifier, different evaluator. Comparing both outputs
+# side by side shows where they agree or diverge before we let the router
+# choose between them.
 
 # %%
 judge_result = judge.evaluate(task, trajectories)
@@ -497,20 +402,9 @@ for trajectory_id, score_result in sorted(
 # %% [markdown]
 # ### 5a. Build the default Oracle router and inspect its routing decision
 #
-# `OracleRouter.default(...)` creates a router with the library's built-in
-# routing policy chain.
-#
-# The first call, `router.route(...)`, does not yet run the final evaluation.
-# Instead, it answers:
-# "Given this task and these trajectories, which strategy should we use?"
-#
-# The printed fields are worth explaining during the demo:
-#
-# - `selected_strategy`: Judge or Verifier
-# - `confidence`: how strongly the router prefers that choice
-# - `elapsed_ms`: routing overhead
-# - `signals`: the extracted routing signals used by the policy chain
-# - `reasoning`: a textual explanation of the decision
+# `router.route(...)` decides which strategy to use without running evaluation.
+# The result includes `selected_strategy`, `confidence`, `elapsed_ms`,
+# `signals`, and `reasoning`.
 
 # %%
 router = OracleRouter.default(verifier, judge)
@@ -564,17 +458,8 @@ print("  strategy used:", oracle_result.strategy_type.value)
 # %% [markdown]
 # ### 6a. Run the evaluation harness on one task
 #
-# The `EvaluationHarness` is an analysis tool rather than a single evaluator.
-# It runs both Judge and Verifier, then computes comparison metrics that help
-# you understand how hard the task is and how much the strategies disagree.
-#
-# In this cell:
-#
-# - `max_workers=2` allows the harness to use limited concurrency when needed
-# - `run_single(...)` produces one `TaskHardnessRecord`
-#
-# The printed metrics summarize the task from an evaluation perspective, not
-# from the perspective of solving the original binary-search problem.
+# `run_single` runs both Judge and Verifier and returns a `TaskHardnessRecord`
+# with comparison metrics: spread, disagreement, confidence, and oracle gap.
 
 # %%
 harness = EvaluationHarness(verifier=verifier, judge=judge, max_workers=2)
@@ -593,17 +478,9 @@ print("  oracle_gap_judge:", round(record.oracle_gap_judge, 4))
 # %% [markdown]
 # ### 6b. Generate a small harness report
 #
-# `run(...)` is the batch version of the harness API. Even though we only pass
-# one task here, it returns the same kind of report object you would use for a
-# larger benchmark suite.
-#
-# We print:
-#
-# - `summary()`: a high-level textual overview
-# - `per_task_table()`: a compact table for each task in the run
-#
-# This cell is useful for showing how the project scales from one-off demos to
-# systematic evaluator comparison.
+# `run(...)` is the batch version. It returns the same report object whether you
+# pass one task or many. `summary()` gives a high-level overview;
+# `per_task_table()` gives a per-task breakdown.
 
 # %%
 report = harness.run([(task, trajectories)], parallel=False)
@@ -623,21 +500,9 @@ print(report.per_task_table())
 # %% [markdown]
 # ### 7a. Create an open-ended task and route it
 #
-# Up to now, the tutorial used a strongly verifiable programming problem. This
-# cell changes the task type.
-#
-# `essay_task` has no ground truth, no test cases, and no execution outputs.
-# That means the Verifier has less concrete evidence to work with, while the
-# Judge becomes a more natural fit.
-#
-# We create two essay trajectories:
-#
-# - `essay-a`: specific and comparative
-# - `essay-b`: vague and shallow
-#
-# Then we ask the router to choose a strategy and evaluate the pair. This cell
-# demonstrates the main promise of the Oracle layer: different task shapes can
-# trigger different evaluators.
+# `essay_task` has no ground truth or test cases, so the Verifier has little
+# evidence to work with and the Judge becomes the natural fit. Two trajectories
+# — one specific, one vague — show the router adapting to task shape.
 
 # %%
 essay_task = Task(

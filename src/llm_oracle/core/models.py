@@ -204,16 +204,26 @@ class ModelConfig:
 class ScoringConfig:
   """Configuration for scoring strategies.
 
+  **Strategy compatibility** — not all fields apply to every strategy:
+
+  * ``use_logprobs`` — Verifier only; ignored by Judge.
+  * ``num_verifications`` — Verifier only; ignored by Judge.
+  * ``num_criteria`` — Judge only; ignored by Verifier.
+  * ``fuzzy_threshold`` — must be in ``[0.0, 1.0]`` (validated at construction).
+  * ``enable_fuzzy_alignment`` — reserved; currently has no effect.
+
+  All other fields apply to every strategy.
+
   Attributes:
-    granularity: Number of score levels (e.g., 20 for A-T scale)
-    num_verifications: Number of repeated verifications
-    num_criteria: Number of evaluation criteria
-    enable_fuzzy_alignment: Enable fuzzy text alignment
-    fuzzy_threshold: Threshold for fuzzy matching
-    use_logprobs: Use log probabilities for scoring
-    temperature: Sampling temperature passed to the model (None = strategy default)
-    max_tokens: Maximum tokens in model response (None = strategy default)
-    additional_params: Strategy-specific parameters not covered by named fields
+    granularity: Number of score levels (e.g., 20 for A–T scale).
+    num_verifications: Repeated verifications per trajectory (Verifier only).
+    num_criteria: Number of evaluation criteria (Judge only).
+    enable_fuzzy_alignment: Reserved; currently unused.
+    fuzzy_threshold: Fuzzy-match threshold in ``[0.0, 1.0]``.
+    use_logprobs: Use log-probability scoring (Verifier only).
+    temperature: Sampling temperature; ``None`` defers to the strategy default.
+    max_tokens: Max response tokens; ``None`` defers to the strategy default.
+    additional_params: Strategy-specific parameters not covered by named fields.
   """
 
   granularity: int = 20

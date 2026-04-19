@@ -1,7 +1,7 @@
 """LLM provider implementations for OpenAI, Anthropic, and Gemini.
 
 This module provides concrete ``LanguageModel`` implementations for the three
-major LLM APIs.  Each provider normalises the vendor-specific response format
+major LLM APIs.  Each provider normalizes the vendor-specific response format
 into the common ``(text, tokens, position_logprobs)`` tuple used throughout
 the Oracle system.
 
@@ -108,7 +108,7 @@ class BaseProvider(ABC):
               ``additional_params``.
 
     Returns:
-      A fully initialised provider instance.
+      A fully initialized provider instance.
     """
     kwargs: dict[str, Any] = dict(config.additional_params)
     if config.api_key:
@@ -156,8 +156,7 @@ class OpenAIProvider(BaseProvider):
       import openai  # type: ignore[import-untyped]  # noqa: PLC0415
     except ImportError as exc:
       raise ImportError(
-        "openai package is required for OpenAIProvider. "
-        "Install it with: pip install openai"
+        "openai package is required for OpenAIProvider. Install it with: pip install openai"
       ) from exc
 
     client_kwargs: dict[str, Any] = {
@@ -265,9 +264,7 @@ class AnthropicProvider(BaseProvider):
         "Install it with: pip install anthropic"
       ) from exc
 
-    self._client = anthropic.Anthropic(
-      api_key=api_key or os.getenv("ANTHROPIC_API_KEY")
-    )
+    self._client = anthropic.Anthropic(api_key=api_key or os.getenv("ANTHROPIC_API_KEY"))
     self._system = system
     self._thinking = thinking
     self._budget_tokens = budget_tokens
@@ -419,9 +416,7 @@ class GeminiProvider(BaseProvider):
       config_kwargs["response_logprobs"] = True
       config_kwargs["logprobs"] = self._top_logprobs
 
-    config_kwargs["thinking_config"] = ThinkingConfig(
-      thinking_budget=self._thinking_budget
-    )
+    config_kwargs["thinking_config"] = ThinkingConfig(thinking_budget=self._thinking_budget)
 
     config = GenerateContentConfig(**config_kwargs)
     response = self._client.models.generate_content(
@@ -460,11 +455,25 @@ class GeminiProvider(BaseProvider):
 class StubResponse:
   """Pre-programmed response for the stub provider.
 
+  The provider detects the evaluation mode from the prompt at call time
+  (presence of ``<score_A>`` / ``<score_B>`` tags) and uses the matching
+  fields:
+
+  * **Single-trajectory** — ``score`` is used; ``score_a`` / ``score_b`` ignored.
+  * **Pairwise** — ``score_a`` and ``score_b`` are used; ``score`` ignored.
+
+  All three fields may be set on the same instance so a single response
+  works regardless of which mode the provider encounters::
+
+      StubResponse(score="G", score_a="G", score_b="E")
+
+  Unset fields fall back to the provider-level defaults.
+
   Attributes:
-    text:   Text to return verbatim.
-    score:  Optional score letter / number to embed in ``<score>`` tags.
-    score_a: Optional score for trajectory A in pairwise prompts.
-    score_b: Optional score for trajectory B in pairwise prompts.
+    text:    Text to return verbatim; generated if omitted.
+    score:   Score for single-trajectory prompts.
+    score_a: Score for trajectory A in pairwise prompts.
+    score_b: Score for trajectory B in pairwise prompts.
   """
 
   text: str = ""
@@ -553,9 +562,7 @@ class StubProvider(BaseProvider):
       )
     else:
       text = stub.text or (
-        f"Analysis:\n"
-        f"The trajectory shows reasonable progress.\n\n"
-        f"<score>{score}</score>"
+        f"Analysis:\nThe trajectory shows reasonable progress.\n\n<score>{score}</score>"
       )
 
     if not return_logprobs:
@@ -740,7 +747,7 @@ def create_provider(config: ModelConfig) -> BaseProvider:
     config: Model configuration.
 
   Returns:
-    An initialised :class:`BaseProvider` subclass.
+    An initialized :class:`BaseProvider` subclass.
   """
   # Explicit provider name takes priority.
   if config.provider:
@@ -749,11 +756,7 @@ def create_provider(config: ModelConfig) -> BaseProvider:
 
   # Infer from model_id prefix.
   model_lower = (config.model_id or "").lower()
-  if (
-    model_lower.startswith("gpt")
-    or model_lower.startswith("o1")
-    or model_lower.startswith("o3")
-  ):
+  if model_lower.startswith("gpt") or model_lower.startswith("o1") or model_lower.startswith("o3"):
     return OpenAIProvider.from_config(config)
   if model_lower.startswith("claude"):
     return AnthropicProvider.from_config(config)

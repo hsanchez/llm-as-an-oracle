@@ -98,20 +98,24 @@ class JudgeStrategy(BaseStrategy):
     swap_pairwise: bool = True,
     reasoning_depth: str = "detailed",
   ):
-    """Initialise the judge strategy.
+    """Initialize the judge strategy.
+
+    **Score scale** — rubric anchors are hardcoded to 1–10.  ``score_min`` and
+    ``score_max`` clip and normalize model output but do not regenerate the
+    rubric text, so values outside ``[1, 10]`` will produce contradictory
+    prompts and unreliable scores.  Keep the defaults unless you provide a
+    custom rubric via ``additional_params``.
 
     Args:
       model: Language model used to generate evaluations.
       config: Scoring configuration (granularity, verification repeats, etc.).
       criteria: Evaluation criteria to score against.
-      score_min: Minimum raw score on the judge's scale.
-      score_max: Maximum raw score on the judge's scale.
-      swap_pairwise: When ``True``, each pairwise comparison is performed twice
-        with trajectory order swapped; the final scores are averaged to cancel
-        positional bias.
-      reasoning_depth: One of ``"brief"``, ``"detailed"``, or ``"chain_of_thought"``.
-        Controls how much reasoning the model is asked to produce before its
-        final score.
+      score_min: Lower bound of the numeric scale (default 1); must be < ``score_max``.
+      score_max: Upper bound of the numeric scale (default 10).
+      swap_pairwise: Run each pairwise comparison twice with swapped order and
+        average the scores to cancel positional bias.
+      reasoning_depth: One of ``"brief"``, ``"detailed"``, or
+        ``"chain_of_thought"``.
     """
     super().__init__(model, config, criteria)
 

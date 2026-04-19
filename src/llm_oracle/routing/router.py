@@ -127,24 +127,24 @@ _JUDGEMENT_KEYWORDS: frozenset[str] = frozenset(
 class RoutingSignals:
   """Named feature signals extracted from a task for routing decisions.
 
-  Each signal is a float in [0, 1] unless noted otherwise.
+  Each signal is a float in ``[0, 1]`` unless noted otherwise.
+
+  When ``prior_hardness`` is set, :class:`PriorHardnessPolicy` (weight=1.8,
+  the highest in the default chain) will typically dominate the routing
+  decision; other signals still vote but rarely flip the outcome.
 
   Attributes:
-    has_ground_truth:       1.0 if the task carries a ground-truth solution.
-    has_test_cases:         1.0 if the task carries formal test cases.
-    trajectory_count:       Raw count of candidate trajectories (not clipped).
-    stated_difficulty:      Encoded difficulty (0=easy, 0.5=medium, 1=hard,
-                            0.5=unknown).
-    verifiable_keyword_density: Fraction of verifiable-domain keywords present
-                            in the problem statement relative to total unique
-                            words checked.
-    judgement_keyword_density:  Same for open-ended / judgement keywords.
-    problem_length:         Normalised length of the problem statement
-                            (clamped at 2 000 chars).
-    output_available:       1.0 if at least one trajectory carries an
-                            ``output`` field.
-    prior_hardness:         Optional prior hardness score from the harness
-                            (None when unavailable).
+    has_ground_truth:           1.0 if the task has a ground-truth solution.
+    has_test_cases:             1.0 if the task has formal test cases.
+    trajectory_count:           Raw candidate count (not clipped to [0, 1]).
+    stated_difficulty:          0=easy, 0.5=medium or unknown, 1=hard.
+    verifiable_keyword_density: Fraction of verifiable-domain keywords in the
+                                problem statement.
+    judgement_keyword_density:  Same for open-ended/judgment keywords.
+    problem_length:             Normalized statement length (capped at 2,000 chars).
+    output_available:           1.0 if any trajectory has an ``output`` field.
+    prior_hardness:             Cached hardness score from the harness; ``None``
+                                if unavailable.  Dominates routing when set.
   """
 
   has_ground_truth: float = 0.0
@@ -162,13 +162,19 @@ class RoutingSignals:
 class PolicyVote:
   """A single policy's routing vote.
 
+  :class:`PolicyChain` scores each strategy as ``sum(confidence * weight)``
+  across all votes for that strategy, then picks the highest.  ``confidence``
+  is also checked against ``PolicyChain.confidence_threshold`` (default 0.6)
+  to filter weak votes before aggregation.
+
   Attributes:
-    policy_name:     Human-readable policy identifier.
-    preferred:       Strategy the policy prefers.
-    confidence:      How strongly the policy prefers this strategy (0–1).
-    weight:          Relative weight of this policy in the chain.
-    signals_used:    Signal names that influenced the vote.
-    reasoning:       Free-form explanation of the vote.
+    policy_name:  Human-readable policy identifier.
+    preferred:    Strategy this policy votes for.
+    confidence:   Vote strength in ``[0.0, 1.0]``.  Below the chain threshold,
+                  the vote is treated as an abstention.
+    weight:       Policy importance in the chain (default 1.0).
+    signals_used: Signal names that drove this vote.
+    reasoning:    Free-form explanation.
   """
 
   policy_name: str
@@ -725,7 +731,7 @@ class SignalExtractor:
     """Extract routing signals.
 
     Args:
-      task:           Task to analyse.
+      task:           Task to analyze.
       trajectories:   Candidate trajectories.
       prior_hardness: Optional cached hardness score.
 
@@ -933,8 +939,6 @@ class OracleRouter:
     trajectories: TrajectoryList,
   ) -> DetailedRoutingDecision:
     """Compute a routing decision without running evaluation.
-
-    This is useful for inspection, logging, or pre-flight checks.
 
     Args:
       task:         Task to route.
