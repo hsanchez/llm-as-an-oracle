@@ -1,10 +1,11 @@
-## Slide 0: LLM as an Oracle
+## Slide 0: LLM-as-an-Oracle
 
-Combining `LLM-as-a-Judge` and `LLM-as-a-Verifier` into an adaptive evaluation layer.
+`LLM-as-an-Oracle` (LaaO) is an evaluation orchestrator. It sits above the
+`LLM-as-a-Judge` and the `LLM-as-a-Verifier` and decides which one is the better
+fit for a given task.
 
-- Audience: Computer Scientists, AI Researchers, and AI Engineers
-- Goal: explain the idea, the motivation, the architecture, and how to use it
-- Framing: `Oracle` is an evaluation orchestrator, not a magical all-knowing model
+The term "Oracle" here means adaptive evaluation layer, not an all-knowing
+model.
 
 
 ## Slide 1: The Problem
@@ -14,7 +15,7 @@ tool-using attempts for the same task.
 
 The hard question is not only:
 
-- "How do we generate candidates?"
+- "How do we generate candidates solutions?"
 
 It is also:
 
@@ -33,7 +34,7 @@ Different tasks demand different evaluation styles.
 - Some tasks are verifiable against test cases, references, or execution output.
 - Some tasks are ambiguous enough that a single evaluation method is brittle.
 
-Using one evaluator everywhere creates failure modes:
+Using one evaluator everywhere creates *failure modes*:
 
 - Judge-only systems can be too coarse or too subjective.
 - Verifier-only systems can be unnecessarily rigid or less useful for open-ended tasks.
@@ -41,7 +42,7 @@ Using one evaluator everywhere creates failure modes:
 This leads to the next question:
 
 - what exactly are we evaluating?
-- not just answers, but full candidate attempts (i.e., a trajectory)
+- not just answers, but full candidate attempts (i.e., *a trajectory*)
 
 
 ## Slide 3: What Exactly Is Being Evaluated?
@@ -88,10 +89,9 @@ Main strength:
 
 `LLM-as-a-Verifier` is a more structured evaluation framework. It is quite
 useful when you need more reliable comparison and evidence-sensitive scoring.
-(Arguably, it is an advancement over standard `Judge` for difficult evaluation.)
-
 In this repo, the Verifier is inspired by:
 
+- [LLM-as-a-Test-Oracle](https://dl.acm.org/doi/10.1145/3650212.3680308)
 - [LLM-as-a-Verifier](https://llm-as-a-verifier.notion.site/)
 
 Core ideas:
@@ -103,11 +103,9 @@ Core ideas:
 
 Good fit:
 
-- coding tasks
-- tasks with reference solutions
+- coding tasks and tasks with reference solutions
 - test-case-based evaluation
-- expected outputs
-- execution evidence
+- expected outputs and execution evidence
 
 Main strength:
 
@@ -125,7 +123,7 @@ Not usually. They solve related but different evaluation problems.
 
 ## Slide 7: What Is LLM-as-an-Oracle?
 
-`LLM-as-an-Oracle` is the orchestration layer I've built above Judge and Verifier.
+`LLM-as-an-Oracle` (LaaO) is the orchestration layer above Judge and Verifier.
 
 In this repo, the Oracle layer:
 
@@ -150,7 +148,7 @@ Conceptual pipeline:
 4. Evaluate trajectories with the selected strategy
 5. Return scores, comparisons, and the selected best trajectory
 
-Key components in this repo:
+Key components:
 
 - `JudgeStrategy`
 - `VerifierStrategy`
@@ -161,7 +159,7 @@ Key components in this repo:
 
 ## Slide 9: Routing Intuition
 
-The Oracle does not route randomly.
+*The Oracle does not route randomly.*
 
 It uses task signals such as:
 

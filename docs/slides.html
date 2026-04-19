@@ -105,16 +105,13 @@
 
 
 <section id="slide-0-llm-as-an-oracle" class="slide level2">
-<h2>Slide 0: LLM as an Oracle</h2>
-<p>Combining <code>LLM-as-a-Judge</code> and
-<code>LLM-as-a-Verifier</code> into an adaptive evaluation layer.</p>
-<ul>
-<li>Audience: Computer Scientists, AI Researchers, and AI Engineers</li>
-<li>Goal: explain the idea, the motivation, the architecture, and how to
-use it</li>
-<li>Framing: <code>Oracle</code> is an evaluation orchestrator, not a
-magical all-knowing model</li>
-</ul>
+<h2>Slide 0: LLM-as-an-Oracle</h2>
+<p><code>LLM-as-an-Oracle</code> (LaaO) is an evaluation orchestrator.
+It sits above the <code>LLM-as-a-Judge</code> and the
+<code>LLM-as-a-Verifier</code> and decides which one is the better fit
+for a given task.</p>
+<p>The term “Oracle” here means adaptive evaluation layer, not an
+all-knowing model.</p>
 </section>
 <section id="slide-1-the-problem" class="slide level2">
 <h2>Slide 1: The Problem</h2>
@@ -122,7 +119,7 @@ magical all-knowing model</li>
 trajectories, or tool-using attempts for the same task.</p>
 <p>The hard question is not only:</p>
 <ul>
-<li>“How do we generate candidates?”</li>
+<li>“How do we generate candidates solutions?”</li>
 </ul>
 <p>It is also:</p>
 <ul>
@@ -143,7 +140,7 @@ execution output.</li>
 <li>Some tasks are ambiguous enough that a single evaluation method is
 brittle.</li>
 </ul>
-<p>Using one evaluator everywhere creates failure modes:</p>
+<p>Using one evaluator everywhere creates <em>failure modes</em>:</p>
 <ul>
 <li>Judge-only systems can be too coarse or too subjective.</li>
 <li>Verifier-only systems can be unnecessarily rigid or less useful for
@@ -152,8 +149,8 @@ open-ended tasks.</li>
 <p>This leads to the next question:</p>
 <ul>
 <li>what exactly are we evaluating?</li>
-<li>not just answers, but full candidate attempts (i.e., a
-trajectory)</li>
+<li>not just answers, but full candidate attempts (i.e., <em>a
+trajectory</em>)</li>
 </ul>
 </section>
 <section id="slide-3-what-exactly-is-being-evaluated"
@@ -200,10 +197,11 @@ attempt.</p>
 <h2>Slide 5: LLM-as-a-Verifier</h2>
 <p><code>LLM-as-a-Verifier</code> is a more structured evaluation
 framework. It is quite useful when you need more reliable comparison and
-evidence-sensitive scoring. (Arguably, it is an advancement over
-standard <code>Judge</code> for difficult evaluation.)</p>
-<p>In this repo, the Verifier is inspired by:</p>
+evidence-sensitive scoring. In this repo, the Verifier is inspired
+by:</p>
 <ul>
+<li><a
+href="https://dl.acm.org/doi/10.1145/3650212.3680308">LLM-as-a-Test-Oracle</a></li>
 <li><a
 href="https://llm-as-a-verifier.notion.site/">LLM-as-a-Verifier</a></li>
 </ul>
@@ -216,11 +214,9 @@ href="https://llm-as-a-verifier.notion.site/">LLM-as-a-Verifier</a></li>
 </ul>
 <p>Good fit:</p>
 <ul>
-<li>coding tasks</li>
-<li>tasks with reference solutions</li>
+<li>coding tasks and tasks with reference solutions</li>
 <li>test-case-based evaluation</li>
-<li>expected outputs</li>
-<li>execution evidence</li>
+<li>expected outputs and execution evidence</li>
 </ul>
 <p>Main strength:</p>
 <ul>
@@ -243,8 +239,8 @@ the better fit for the task.</li>
 </section>
 <section id="slide-7-what-is-llm-as-an-oracle" class="slide level2">
 <h2>Slide 7: What Is LLM-as-an-Oracle?</h2>
-<p><code>LLM-as-an-Oracle</code> is the orchestration layer I’ve built
-above Judge and Verifier.</p>
+<p><code>LLM-as-an-Oracle</code> (LaaO) is the orchestration layer above
+Judge and Verifier.</p>
 <p>In this repo, the Oracle layer:</p>
 <ul>
 <li>exposes both evaluators</li>
@@ -269,7 +265,7 @@ for the task.</li>
 <li>Evaluate trajectories with the selected strategy</li>
 <li>Return scores, comparisons, and the selected best trajectory</li>
 </ol>
-<p>Key components in this repo:</p>
+<p>Key components:</p>
 <ul>
 <li><code>JudgeStrategy</code></li>
 <li><code>VerifierStrategy</code></li>
@@ -280,7 +276,7 @@ for the task.</li>
 </section>
 <section id="slide-9-routing-intuition" class="slide level2">
 <h2>Slide 9: Routing Intuition</h2>
-<p>The Oracle does not route randomly.</p>
+<p><em>The Oracle does not route randomly.</em></p>
 <p>It uses task signals such as:</p>
 <ul>
 <li>presence of ground truth</li>

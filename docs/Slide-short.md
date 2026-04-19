@@ -1,9 +1,11 @@
 ## Slide 0: LLM as an Oracle
 
-Combining `LLM-as-a-Judge` and `LLM-as-a-Verifier` into an adaptive evaluation layer.
+`LLM-as-an-Oracle` is an evaluation orchestrator. It sits above the
+`LLM-as-a-Judge` and the `LLM-as-a-Verifier` and decides which one is the better
+fit for a given task.
 
-- Audience: Computer Scientists, AI Researchers, and AI Engineers
-- Goal: explain the idea, when to use it, and how to use it
+The term "Oracle" here means adaptive evaluation layer, not an all-knowing
+model. *It is a system design pattern.*
 
 
 ## Slide 1: The Core Problem
