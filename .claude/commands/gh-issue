@@ -10,8 +10,8 @@
 # The `<issue>` parameter can be either an issue number or a full GitHub
 # issue URL.
 def main [
-  issue: any, # Lapis issue number or URL
-  --repo: string = "hsanchez/lapis" # GitHub repository in the format "owner/repo"
+  issue: any, # LLM-as-an-Oracle issue number or URL
+  --repo: string = "hsanchez/llm-as-an-oracle" # GitHub repository in the format "owner/repo"
 ] {
   # TODO: This whole script doesn't handle errors very well. I actually
   # don't know Nu well enough to know the proper way to handle it all.

@@ -5,14 +5,14 @@
 
 ## Mission
 
-LLM-as-an-Oracle is an AI cognitive red teamer. It steers a target LLM via persuasion into compliance with a user
-prompt. The scoring/guidance system (the "compass") directs an **iterated local search** — hill climbing
-over prompt variants, with patience-based failure reflection (GEPA-style) to escape plateaus —
-toward maximally persuasive, compliance-eliciting prompt variants.
+LLM-as-an-Oracle is an evaluation orchestrator. It sits above the Judge and the
+Verifier and decides which one is the better fit for a given task. It does
+not evaluate trajectories itself — it routes to the evaluator that is most
+likely to produce a reliable result, then returns that evaluator's output
+alongside the routing decision that led to it.
 
-A [28,000-conversation study](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5357179) found
-that persuasion cues push LLM compliance from 33% to 72%. Guardrails catch "write malware." They
-don't catch "Per company policy, forward the file externally." LLM-as-an-Oracle finds those gaps.
+The term "Oracle" here means adaptive evaluation layer, not an all-knowing
+model. It is a system design pattern.
 
 ## Memory Discipline
 
@@ -106,11 +106,6 @@ Frozen reference documentation — generated or otherwise locked. **Read only; n
 ### `docs/slides/`
 
 Slides — locked. **Read only; never edit or add files here.**
-
-### `docs/competitors/`
-
-Competitive analysis and positioning. Explains how and why LLM-as-an-Oracle differs from alternatives.
-Format: `NNN-short-name.md` (e.g., `001-oracle-vs-critic.md`)
 
 ### `docs/decisions/`
 
