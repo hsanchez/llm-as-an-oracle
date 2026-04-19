@@ -1,4 +1,36 @@
-## Slide 0: LLM-as-an-Oracle
+## Slide 0: The Evaluation Problem
+
+Human evaluation is the gold standard — but it does not scale.
+
+- slow and expensive to run at the pace of model iteration
+- automated metrics (BLEU, ROUGE, exact match) are shallow
+- they miss reasoning quality, correctness of approach, and usefulness
+
+The field needed a better path.
+
+
+## Slide 1: The LLM-as-* Idiom
+
+Around 2023, frontier models crossed a reliability threshold:
+
+- their judgments on text quality and reasoning correlate strongly with human judgments
+- they are instruction-following enough to apply a rubric consistently
+- a model call is cheap enough to run many evaluations per task
+
+This gave rise to a family of evaluation patterns:
+
+- `LLM-as-a-Judge` — holistic, preference-based scoring
+- `LLM-as-a-Verifier` — structured, evidence-sensitive scoring
+- `LLM-as-a-Critic`, `LLM-as-a-Ranker`, and others
+
+The key insight: if a model is capable enough to produce output, it is capable enough to evaluate it.
+
+But which evaluation pattern is the right one for a given task?
+
+That is the question `LLM-as-an-Oracle` answers.
+
+
+## Slide 2: LLM-as-an-Oracle
 
 `LLM-as-an-Oracle` (LaaO) is an evaluation orchestrator. It sits above the
 `LLM-as-a-Judge` and the `LLM-as-a-Verifier` and decides which one is the better
@@ -8,14 +40,14 @@ The term "Oracle" here means adaptive evaluation layer, not an all-knowing
 model.
 
 
-## Slide 1: The Problem
+## Slide 3: The Problem
 
 Modern LLM systems often produce multiple candidate solutions, trajectories, or
 tool-using attempts for the same task.
 
 The hard question is not only:
 
-- "How do we generate candidates solutions?"
+- "How do we generate candidate solutions?"
 
 It is also:
 
@@ -26,7 +58,7 @@ It is also:
 The answer is often no.
 
 
-## Slide 2: Why One Evaluator Is Not Enough
+## Slide 4: Why One Evaluator Is Not Enough
 
 Different tasks demand different evaluation styles.
 
@@ -45,7 +77,7 @@ This leads to the next question:
 - not just answers, but full candidate attempts (i.e., *a trajectory*)
 
 
-## Slide 3: What Exactly Is Being Evaluated?
+## Slide 5: What Exactly Is Being Evaluated?
 
 In this setting, a `trajectory` is a candidate task-solving attempt.
 
@@ -61,7 +93,7 @@ A trajectory may include:
 The evaluator does not just score a final answer. It scores a full attempt.
 
 
-## Slide 4: LLM-as-a-Judge
+## Slide 6: LLM-as-a-Judge
 
 `LLM-as-a-Judge` evaluates trajectories holistically.
 
@@ -85,7 +117,7 @@ Main strength:
 - broad, flexible, human-like evaluation
 
 
-## Slide 5: LLM-as-a-Verifier
+## Slide 7: LLM-as-a-Verifier
 
 `LLM-as-a-Verifier` is a more structured evaluation framework. It is quite
 useful when you need more reliable comparison and evidence-sensitive scoring.
@@ -112,7 +144,7 @@ Main strength:
 - more discriminative evaluation on hard, evidence-grounded tasks
 
 
-## Slide 6: Are Judge and Verifier Replacements?
+## Slide 8: Are Judge and Verifier Replacements?
 
 Not usually. They solve related but different evaluation problems.
 
@@ -121,24 +153,7 @@ Not usually. They solve related but different evaluation problems.
 - The `Oracle` layer exists to decide which evaluator is the better fit for the task.
 
 
-## Slide 7: What Is LLM-as-an-Oracle?
-
-`LLM-as-an-Oracle` (LaaO) is the orchestration layer above Judge and Verifier.
-
-In this repo, the Oracle layer:
-
-- exposes both evaluators
-- routes tasks to one of them
-- records the routing decision
-- supports side-by-side comparison
-
-Important definition:
-
-- The `Oracle` layer is an evaluation orchestrator that routes between Judge and
-  Verifier and selects the better evaluation mode for the task.
-
-
-## Slide 8: Oracle Architecture
+## Slide 9: Oracle Architecture
 
 Conceptual pipeline:
 
@@ -157,7 +172,7 @@ Key components:
 - provider layer for model backends
 
 
-## Slide 9: Routing Intuition
+## Slide 10: Routing Intuition
 
 *The Oracle does not route randomly.*
 
@@ -178,7 +193,7 @@ Typical intuition:
 - ambiguous cases -> use routing policy and confidence
 
 
-## Slide 10: When To Use Judge
+## Slide 11: When To Use Judge
 
 Choose `Judge` when:
 
@@ -194,7 +209,7 @@ Examples:
 - "Which summary is more useful to a human reader?"
 
 
-## Slide 11: When To Use Verifier
+## Slide 12: When To Use Verifier
 
 Choose `Verifier` when:
 
@@ -210,7 +225,7 @@ Examples:
 - "Which agent trajectory is more likely correct under formal constraints?"
 
 
-## Slide 12: When To Use Oracle
+## Slide 13: When To Use Oracle
 
 Choose `Oracle` when:
 
@@ -227,7 +242,7 @@ This is especially useful in:
 - evaluation pipelines with mixed task types
 
 
-## Slide 13: How To Use It in This Repo
+## Slide 14: How To Use It in This Repo
 
 The repository exposes a CLI and Python abstractions.
 
@@ -248,7 +263,7 @@ What each command does:
 - `test`: runs the test suite
 
 
-## Slide 14: How To Read a Routing Decision
+## Slide 15: How To Read a Routing Decision
 
 A routing decision should be interpretable.
 
@@ -264,7 +279,7 @@ This matters because Oracle is not only selecting an evaluator.
 It is also making that choice auditable.
 
 
-## Slide 15: Suggested Tutorial Flow for New Users
+## Slide 16: Suggested Tutorial Flow for New Users
 
 If you are new to the repo, use this sequence:
 
@@ -278,7 +293,7 @@ If you are new to the repo, use this sequence:
 This teaches both the concept and the mechanics.
 
 
-## Slide 16: Research Framing
+## Slide 17: Research Framing
 
 For researchers, the interesting question is not just:
 
@@ -296,7 +311,7 @@ This repo treats Oracle as a hypothesis:
 - adaptive evaluator selection is better than evaluator monoculture
 
 
-## Slide 17: Engineering Framing
+## Slide 18: Engineering Framing
 
 For engineers, the value is operational.
 
@@ -316,7 +331,7 @@ This is useful when you care about:
 - evaluator specialization
 
 
-## Slide 18: Limitations
+## Slide 19: Limitations
 
 This framing is useful, but not magic.
 
@@ -333,7 +348,7 @@ The right mental model is:
 - adaptive evaluation, not omniscient evaluation
 
 
-## Slide 19: Takeaways
+## Slide 20: Takeaways
 
 - `Judge` and `Verifier` solve related but different evaluation problems.
 - `Verifier` is stronger for structured, evidence-grounded evaluation.
@@ -342,7 +357,7 @@ The right mental model is:
 - The main idea is not replacement. It is adaptive evaluator selection.
 
 
-## Slide 20: Discussion
+## Slide 21: Discussion
 
 Questions worth discussing with this audience:
 

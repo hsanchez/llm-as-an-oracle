@@ -1,4 +1,36 @@
-## Slide 0: LLM as an Oracle
+## Slide 0: The Evaluation Problem
+
+Human evaluation is the gold standard — but it does not scale.
+
+- slow and expensive to run at the pace of model iteration
+- automated metrics (BLEU, ROUGE, exact match) are shallow
+- they miss reasoning quality, correctness of approach, and usefulness
+
+The field needed a better path.
+
+
+## Slide 1: The LLM-as-* Idiom
+
+Around 2023, frontier models crossed a reliability threshold:
+
+- their judgments on text quality and reasoning correlate strongly with human judgments
+- they are instruction-following enough to apply a rubric consistently
+- a model call is cheap enough to run many evaluations per task
+
+This gave rise to a family of evaluation patterns:
+
+- `LLM-as-a-Judge` — holistic, preference-based scoring
+- `LLM-as-a-Verifier` — structured, evidence-sensitive scoring
+- `LLM-as-a-Critic`, `LLM-as-a-Ranker`, and others
+
+The key insight: if a model is capable enough to produce output, it is capable enough to evaluate it.
+
+But which evaluation pattern is the right one for a given task?
+
+That is the question `LLM-as-an-Oracle` answers.
+
+
+## Slide 2: LLM as an Oracle
 
 `LLM-as-an-Oracle` is an evaluation orchestrator. It sits above the
 `LLM-as-a-Judge` and the `LLM-as-a-Verifier` and decides which one is the better
@@ -8,7 +40,7 @@ The term "Oracle" here means adaptive evaluation layer, not an all-knowing
 model. *It is a system design pattern.*
 
 
-## Slide 1: The Core Problem
+## Slide 3: The Core Problem
 
 LLM systems often produce multiple candidate solutions or trajectories for the same task.
 
@@ -19,7 +51,7 @@ The hard question is:
 Using one evaluator for every task is often the wrong abstraction.
 
 
-## Slide 2: Two Evaluation Paradigms
+## Slide 4: Two Evaluation Paradigms
 
 `LLM-as-a-Judge`
 
@@ -41,7 +73,7 @@ This leads to the next question:
 - what exactly are we evaluating?
 - not just answers, but full candidate attempts (i.e., a trajectory)
 
-## Slide 3: What Is a Trajectory?
+## Slide 5: What Is a Trajectory?
 
 A `trajectory` is a candidate task-solving attempt.
 
@@ -56,7 +88,7 @@ It may include:
 The evaluator is scoring the attempt, not only the final answer.
 
 
-## Slide 4: Judge vs Verifier
+## Slide 6: Judge vs Verifier
 
 Use `Judge` when:
 
@@ -72,7 +104,7 @@ Use `Verifier` when:
 - execution evidence matters
 
 
-## Slide 5: What Is the Oracle Layer?
+## Slide 7: What Is the Oracle Layer?
 
 `LLM-as-an-Oracle` is the orchestration layer above Judge and Verifier.
 
@@ -87,7 +119,7 @@ This repo treats Oracle as:
 - an auditable decision layer
 
 
-## Slide 6: How Routing Works
+## Slide 8: How Routing Works
 
 The Oracle uses task signals such as:
 
@@ -105,7 +137,7 @@ Typical intuition:
 - coding task with tests -> Verifier
 
 
-## Slide 7: When To Use Oracle
+## Slide 9: When To Use Oracle
 
 Use `Oracle` when:
 
@@ -122,7 +154,7 @@ This is especially useful for:
 - mixed evaluation workloads
 
 
-## Slide 8: How To Use This Repo
+## Slide 10: How To Use This Repo
 
 CLI examples:
 
@@ -141,7 +173,7 @@ Suggested flow:
 4. read the routing signals and confidence
 
 
-## Slide 9: Main Takeaways
+## Slide 11: Main Takeaways
 
 - `Judge` and `Verifier` are complementary, not identical.
 - `Verifier` is stronger for structured, evidence-based evaluation.

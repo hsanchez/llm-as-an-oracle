@@ -104,8 +104,43 @@
     <div class="slides">
 
 
-<section id="slide-0-llm-as-an-oracle" class="slide level2">
-<h2>Slide 0: LLM-as-an-Oracle</h2>
+<section id="slide-0-the-evaluation-problem" class="slide level2">
+<h2>Slide 0: The Evaluation Problem</h2>
+<p>Human evaluation is the gold standard — but it does not scale.</p>
+<ul>
+<li>slow and expensive to run at the pace of model iteration</li>
+<li>automated metrics (BLEU, ROUGE, exact match) are shallow</li>
+<li>they miss reasoning quality, correctness of approach, and
+usefulness</li>
+</ul>
+<p>The field needed a better path.</p>
+</section>
+<section id="slide-1-the-llm-as--idiom" class="slide level2">
+<h2>Slide 1: The LLM-as-* Idiom</h2>
+<p>Around 2023, frontier models crossed a reliability threshold:</p>
+<ul>
+<li>their judgments on text quality and reasoning correlate strongly
+with human judgments</li>
+<li>they are instruction-following enough to apply a rubric
+consistently</li>
+<li>a model call is cheap enough to run many evaluations per task</li>
+</ul>
+<p>This gave rise to a family of evaluation patterns:</p>
+<ul>
+<li><code>LLM-as-a-Judge</code> — holistic, preference-based
+scoring</li>
+<li><code>LLM-as-a-Verifier</code> — structured, evidence-sensitive
+scoring</li>
+<li><code>LLM-as-a-Critic</code>, <code>LLM-as-a-Ranker</code>, and
+others</li>
+</ul>
+<p>The key insight: if a model is capable enough to produce output, it
+is capable enough to evaluate it.</p>
+<p>But which evaluation pattern is the right one for a given task?</p>
+<p>That is the question <code>LLM-as-an-Oracle</code> answers.</p>
+</section>
+<section id="slide-2-llm-as-an-oracle" class="slide level2">
+<h2>Slide 2: LLM-as-an-Oracle</h2>
 <p><code>LLM-as-an-Oracle</code> (LaaO) is an evaluation orchestrator.
 It sits above the <code>LLM-as-a-Judge</code> and the
 <code>LLM-as-a-Verifier</code> and decides which one is the better fit
@@ -113,13 +148,13 @@ for a given task.</p>
 <p>The term “Oracle” here means adaptive evaluation layer, not an
 all-knowing model.</p>
 </section>
-<section id="slide-1-the-problem" class="slide level2">
-<h2>Slide 1: The Problem</h2>
+<section id="slide-3-the-problem" class="slide level2">
+<h2>Slide 3: The Problem</h2>
 <p>Modern LLM systems often produce multiple candidate solutions,
 trajectories, or tool-using attempts for the same task.</p>
 <p>The hard question is not only:</p>
 <ul>
-<li>“How do we generate candidates solutions?”</li>
+<li>“How do we generate candidate solutions?”</li>
 </ul>
 <p>It is also:</p>
 <ul>
@@ -129,9 +164,9 @@ trajectories, or tool-using attempts for the same task.</p>
 </ul>
 <p>The answer is often no.</p>
 </section>
-<section id="slide-2-why-one-evaluator-is-not-enough"
+<section id="slide-4-why-one-evaluator-is-not-enough"
 class="slide level2">
-<h2>Slide 2: Why One Evaluator Is Not Enough</h2>
+<h2>Slide 4: Why One Evaluator Is Not Enough</h2>
 <p>Different tasks demand different evaluation styles.</p>
 <ul>
 <li>Some tasks are open-ended, subjective, or rubric-based.</li>
@@ -153,9 +188,9 @@ open-ended tasks.</li>
 trajectory</em>)</li>
 </ul>
 </section>
-<section id="slide-3-what-exactly-is-being-evaluated"
+<section id="slide-5-what-exactly-is-being-evaluated"
 class="slide level2">
-<h2>Slide 3: What Exactly Is Being Evaluated?</h2>
+<h2>Slide 5: What Exactly Is Being Evaluated?</h2>
 <p>In this setting, a <code>trajectory</code> is a candidate
 task-solving attempt.</p>
 <p>A trajectory may include:</p>
@@ -170,8 +205,8 @@ task-solving attempt.</p>
 <p>The evaluator does not just score a final answer. It scores a full
 attempt.</p>
 </section>
-<section id="slide-4-llm-as-a-judge" class="slide level2">
-<h2>Slide 4: LLM-as-a-Judge</h2>
+<section id="slide-6-llm-as-a-judge" class="slide level2">
+<h2>Slide 6: LLM-as-a-Judge</h2>
 <p><code>LLM-as-a-Judge</code> evaluates trajectories holistically.</p>
 <p>Typical characteristics:</p>
 <ul>
@@ -193,8 +228,8 @@ attempt.</p>
 <li>broad, flexible, human-like evaluation</li>
 </ul>
 </section>
-<section id="slide-5-llm-as-a-verifier" class="slide level2">
-<h2>Slide 5: LLM-as-a-Verifier</h2>
+<section id="slide-7-llm-as-a-verifier" class="slide level2">
+<h2>Slide 7: LLM-as-a-Verifier</h2>
 <p><code>LLM-as-a-Verifier</code> is a more structured evaluation
 framework. It is quite useful when you need more reliable comparison and
 evidence-sensitive scoring. In this repo, the Verifier is inspired
@@ -223,9 +258,9 @@ href="https://llm-as-a-verifier.notion.site/">LLM-as-a-Verifier</a></li>
 <li>more discriminative evaluation on hard, evidence-grounded tasks</li>
 </ul>
 </section>
-<section id="slide-6-are-judge-and-verifier-replacements"
+<section id="slide-8-are-judge-and-verifier-replacements"
 class="slide level2">
-<h2>Slide 6: Are Judge and Verifier Replacements?</h2>
+<h2>Slide 8: Are Judge and Verifier Replacements?</h2>
 <p>Not usually. They solve related but different evaluation
 problems.</p>
 <ul>
@@ -237,26 +272,8 @@ correctness assessment.</li>
 the better fit for the task.</li>
 </ul>
 </section>
-<section id="slide-7-what-is-llm-as-an-oracle" class="slide level2">
-<h2>Slide 7: What Is LLM-as-an-Oracle?</h2>
-<p><code>LLM-as-an-Oracle</code> (LaaO) is the orchestration layer above
-Judge and Verifier.</p>
-<p>In this repo, the Oracle layer:</p>
-<ul>
-<li>exposes both evaluators</li>
-<li>routes tasks to one of them</li>
-<li>records the routing decision</li>
-<li>supports side-by-side comparison</li>
-</ul>
-<p>Important definition:</p>
-<ul>
-<li>The <code>Oracle</code> layer is an evaluation orchestrator that
-routes between Judge and Verifier and selects the better evaluation mode
-for the task.</li>
-</ul>
-</section>
-<section id="slide-8-oracle-architecture" class="slide level2">
-<h2>Slide 8: Oracle Architecture</h2>
+<section id="slide-9-oracle-architecture" class="slide level2">
+<h2>Slide 9: Oracle Architecture</h2>
 <p>Conceptual pipeline:</p>
 <ol type="1">
 <li>Receive a task and one or more candidate trajectories</li>
@@ -274,8 +291,8 @@ for the task.</li>
 <li>provider layer for model backends</li>
 </ul>
 </section>
-<section id="slide-9-routing-intuition" class="slide level2">
-<h2>Slide 9: Routing Intuition</h2>
+<section id="slide-10-routing-intuition" class="slide level2">
+<h2>Slide 10: Routing Intuition</h2>
 <p><em>The Oracle does not route randomly.</em></p>
 <p>It uses task signals such as:</p>
 <ul>
@@ -294,8 +311,8 @@ for the task.</li>
 <li>ambiguous cases -&gt; use routing policy and confidence</li>
 </ul>
 </section>
-<section id="slide-10-when-to-use-judge" class="slide level2">
-<h2>Slide 10: When To Use Judge</h2>
+<section id="slide-11-when-to-use-judge" class="slide level2">
+<h2>Slide 11: When To Use Judge</h2>
 <p>Choose <code>Judge</code> when:</p>
 <ul>
 <li>evaluation is open-ended</li>
@@ -310,8 +327,8 @@ for the task.</li>
 <li>“Which summary is more useful to a human reader?”</li>
 </ul>
 </section>
-<section id="slide-11-when-to-use-verifier" class="slide level2">
-<h2>Slide 11: When To Use Verifier</h2>
+<section id="slide-12-when-to-use-verifier" class="slide level2">
+<h2>Slide 12: When To Use Verifier</h2>
 <p>Choose <code>Verifier</code> when:</p>
 <ul>
 <li>correctness can be grounded in evidence</li>
@@ -327,8 +344,8 @@ for the task.</li>
 constraints?”</li>
 </ul>
 </section>
-<section id="slide-12-when-to-use-oracle" class="slide level2">
-<h2>Slide 12: When To Use Oracle</h2>
+<section id="slide-13-when-to-use-oracle" class="slide level2">
+<h2>Slide 13: When To Use Oracle</h2>
 <p>Choose <code>Oracle</code> when:</p>
 <ul>
 <li>tasks vary in type</li>
@@ -344,8 +361,8 @@ constraints?”</li>
 <li>evaluation pipelines with mixed task types</li>
 </ul>
 </section>
-<section id="slide-13-how-to-use-it-in-this-repo" class="slide level2">
-<h2>Slide 13: How To Use It in This Repo</h2>
+<section id="slide-14-how-to-use-it-in-this-repo" class="slide level2">
+<h2>Slide 14: How To Use It in This Repo</h2>
 <p>The repository exposes a CLI and Python abstractions.</p>
 <p>CLI examples:</p>
 <div class="sourceCode" id="cb1"><pre
@@ -361,9 +378,9 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="
 <li><code>test</code>: runs the test suite</li>
 </ul>
 </section>
-<section id="slide-14-how-to-read-a-routing-decision"
+<section id="slide-15-how-to-read-a-routing-decision"
 class="slide level2">
-<h2>Slide 14: How To Read a Routing Decision</h2>
+<h2>Slide 15: How To Read a Routing Decision</h2>
 <p>A routing decision should be interpretable.</p>
 <p>What to inspect:</p>
 <ul>
@@ -376,9 +393,9 @@ class="slide level2">
 <p>This matters because Oracle is not only selecting an evaluator. It is
 also making that choice auditable.</p>
 </section>
-<section id="slide-15-suggested-tutorial-flow-for-new-users"
+<section id="slide-16-suggested-tutorial-flow-for-new-users"
 class="slide level2">
-<h2>Slide 15: Suggested Tutorial Flow for New Users</h2>
+<h2>Slide 16: Suggested Tutorial Flow for New Users</h2>
 <p>If you are new to the repo, use this sequence:</p>
 <ol type="1">
 <li>Run the offline demo</li>
@@ -390,8 +407,8 @@ class="slide level2">
 </ol>
 <p>This teaches both the concept and the mechanics.</p>
 </section>
-<section id="slide-16-research-framing" class="slide level2">
-<h2>Slide 16: Research Framing</h2>
+<section id="slide-17-research-framing" class="slide level2">
+<h2>Slide 17: Research Framing</h2>
 <p>For researchers, the interesting question is not just:</p>
 <ul>
 <li>“Can an LLM evaluate another LLM?”</li>
@@ -409,8 +426,8 @@ class="slide level2">
 monoculture</li>
 </ul>
 </section>
-<section id="slide-17-engineering-framing" class="slide level2">
-<h2>Slide 17: Engineering Framing</h2>
+<section id="slide-18-engineering-framing" class="slide level2">
+<h2>Slide 18: Engineering Framing</h2>
 <p>For engineers, the value is operational.</p>
 <p>Oracle gives you:</p>
 <ul>
@@ -428,8 +445,8 @@ monoculture</li>
 <li>evaluator specialization</li>
 </ul>
 </section>
-<section id="slide-18-limitations" class="slide level2">
-<h2>Slide 18: Limitations</h2>
+<section id="slide-19-limitations" class="slide level2">
+<h2>Slide 19: Limitations</h2>
 <p>This framing is useful, but not magic.</p>
 <p>Limitations include:</p>
 <ul>
@@ -444,8 +461,8 @@ monoculture</li>
 <li>adaptive evaluation, not omniscient evaluation</li>
 </ul>
 </section>
-<section id="slide-19-takeaways" class="slide level2">
-<h2>Slide 19: Takeaways</h2>
+<section id="slide-20-takeaways" class="slide level2">
+<h2>Slide 20: Takeaways</h2>
 <ul>
 <li><code>Judge</code> and <code>Verifier</code> solve related but
 different evaluation problems.</li>
@@ -459,8 +476,8 @@ them.</li>
 selection.</li>
 </ul>
 </section>
-<section id="slide-20-discussion" class="slide level2">
-<h2>Slide 20: Discussion</h2>
+<section id="slide-21-discussion" class="slide level2">
+<h2>Slide 21: Discussion</h2>
 <p>Questions worth discussing with this audience:</p>
 <ul>
 <li>What task features best predict Judge vs Verifier success?</li>
