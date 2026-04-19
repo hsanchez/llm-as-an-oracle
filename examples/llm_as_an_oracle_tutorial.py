@@ -118,7 +118,7 @@ stub = StubProvider(
     # letter token: the letter sets the score level and the gap between score_a
     # and score_b sets how confidently it picks a tournament winner. The Judge
     # expects numeric tokens; letters never match its regex, so it always falls
-    # back to the scale midpoint (5.5 → 0.5 normalised) regardless of these values.
+    # back to the scale midpoint (5.5 → 0.5 normalized) regardless of these values.
     StubResponse(
       score="B", score_a="B", score_b="G"
     ),  # verifier: near-top score, 5-letter gap → clear winner
@@ -199,9 +199,9 @@ print("Criteria:", [criterion.name for criterion in criteria])
 #
 # Three trajectories give the evaluators something to rank:
 #
-# - `traj-complete`: extracts all facts, correctly categorised
-# - `traj-partial`: misses several facts and one organisation
-# - `traj-wrong`: omits dates entirely and hallucates one fact
+# - `traj-complete`: extracts all facts, correctly categorized
+# - `traj-partial`: misses several facts and one organization
+# - `traj-wrong`: omits dates entirely and hallucinates one fact
 
 # %%
 passage = (
@@ -224,12 +224,12 @@ task = Task(
   description="Extract named entities and key facts from a biographical passage.",
   problem_statement=(
     f"Read the passage below and extract all named entities (people, places, "
-    f"organisations, dates) and key facts. Group them by category.\n\n{passage}"
+    f"organizations, dates) and key facts. Group them by category.\n\n{passage}"
   ),
   ground_truth=(
     "People: Marie Curie, Pierre Curie, Henri Becquerel\n"
     "Places: Warsaw, Poland, Paris\n"
-    "Organisations: University of Paris\n"
+    "Organizations: University of Paris\n"
     "Dates: 1867, 1891, 1903, 1911\n"
     "Awards: Nobel Prize in Physics (1903), Nobel Prize in Chemistry (1911)\n"
     "Notable: first person to win Nobel Prize in two different sciences"
@@ -248,7 +248,7 @@ trajectories = [
     content=(
       "People: Marie Curie, Pierre Curie, Henri Becquerel\n"
       "Places: Warsaw (Poland), Paris\n"
-      "Organisations: University of Paris\n"
+      "Organizations: University of Paris\n"
       "Dates: 1867 (born), 1891 (moved to Paris), 1903 (Physics Nobel), 1911 (Chemistry Nobel)\n"
       "Awards: Nobel Prize in Physics (1903), Nobel Prize in Chemistry (1911)\n"
       "Notable: first person to win Nobel Prize in two different sciences"

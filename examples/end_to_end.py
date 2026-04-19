@@ -137,7 +137,7 @@ trajectories = [
 print("\n# Verifier — score a single trajectory against one criterion")
 score = verifier.score_trajectory(task, trajectories[0], criteria[0])
 print(f"  trajectory : {score.trajectory_id}")
-print(f"  score      : {score.score:.4f}  (normalised 0-1)")
+print(f"  score      : {score.score:.4f}  (normalized 0-1)")
 print(f"  confidence : {score.confidence:.4f}")
 
 print("\n# Verifier — pairwise comparison of two trajectories")
