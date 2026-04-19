@@ -96,6 +96,10 @@ from llm_oracle import (
 # evaluator scores against — each entry has an `id`, `name`, `description`,
 # and `weight`.
 #
+# Criteria are fully caller-defined. They work for any domain — not just code.
+# The three below are intentionally general so they apply to both the fact
+# extraction task (sections 2–6) and the essay task (section 7).
+#
 # > **Note:** `use_logprobs=True` tells the Verifier to extract token-level log
 # > probabilities from the model response — the mechanism it uses to achieve
 # > finer score discrimination between close candidates.
@@ -107,14 +111,16 @@ stub = StubProvider(
   default_score_a="C",
   default_score_b="H",
   responses=[
-    StubResponse(score="B", score_a="B", score_b="G"),
-    StubResponse(score="C", score_a="C", score_b="H"),
-    StubResponse(score="A", score_a="A", score_b="F"),
-    StubResponse(score="D", score_a="B", score_b="J"),
+    # TODO: describe the responses and their scores
+    StubResponse(score="B", score_a="B", score_b="G"),  # TODO: is this verifier-optimistic?
+    StubResponse(score="C", score_a="C", score_b="H"),  # TODO: is this verifier-neutral?
+    StubResponse(score="A", score_a="A", score_b="F"),  # TODO: is this judger-optimistic?
+    StubResponse(score="D", score_a="B", score_b="J"),  # TODO: is this judger-neutral?
   ],
   seed=7,
 )
 
+# TODO: describe the scoring config and its parameters
 config = ScoringConfig(
   granularity=20,
   num_verifications=2,
@@ -123,22 +129,23 @@ config = ScoringConfig(
 )
 
 criteria = [
+  # TODO: describe each criterion and its weight
   EvaluationCriterion(
-    id="correctness",
-    name="Correctness",
-    description="Does the trajectory satisfy the task requirements and produce the correct result?",
+    id="completeness",
+    name="Completeness",
+    description="Does the response capture all key information required by the task?",
     weight=2.0,
   ),
   EvaluationCriterion(
-    id="efficiency",
-    name="Efficiency",
-    description="Is the solution computationally reasonable for the problem being solved?",
-    weight=1.0,
+    id="accuracy",
+    name="Accuracy",
+    description="Is the information provided correct, with no hallucinations or errors?",
+    weight=2.0,
   ),
   EvaluationCriterion(
     id="clarity",
     name="Clarity",
-    description="Is the solution easy to read, explain, and maintain?",
+    description="Is the response clearly organized and easy to understand?",
     weight=1.0,
   ),
 ]
@@ -159,95 +166,97 @@ print("Criteria:", [criterion.name for criterion in criteria])
 #
 # A `Trajectory` is a candidate task-solving attempt. It may contain:
 #
-# - the main solution content
+# - the main response content
 # - execution output
 # - an optional reward signal
 
 # %% [markdown]
-# ### 2a. Build one verifiable task and three candidate solutions
+# ### 2a. Build one verifiable task and three candidate responses
+#
+# The task is fact extraction — given a short biographical passage, extract the
+# key facts. This is intentionally non-code to show that the library works on
+# any domain where ground truth and test cases can be defined.
 #
 # Three trajectories give the evaluators something to rank:
 #
-# - `traj-correct`: proper binary search
-# - `traj-linear`: correct output, wrong algorithm
-# - `traj-buggy`: boundary-condition bug
+# - `traj-complete`: extracts all facts, correctly categorised
+# - `traj-partial`: misses several facts and one organisation
+# - `traj-wrong`: omits dates entirely and hallucates one fact
 
 # %%
+passage = (
+  "Marie Curie was born in Warsaw, Poland in 1867. She moved to Paris in 1891 "
+  "to study at the University of Paris. In 1903 she shared the Nobel Prize in "
+  "Physics with her husband Pierre Curie and Henri Becquerel. In 1911 she "
+  "received a second Nobel Prize, this time in Chemistry, becoming the first "
+  "person to win the prize in two different sciences."
+)
+
+# REMEMBER:
+# Task `difficulty` is a hint to the router's `DifficultyPolicy`; it influences
+# which strategy gets voted for. `MEDIUM` and `UNKNOWN` happen to map to the
+# same signal (`0.5`), so in this specific case it makes no practical difference,
+# but it documents the intent: this is a moderately complex task, not trivially
+# easy or notably hard.
+
 task = Task(
-  id="binary-search",
-  description="Implement binary search over a sorted integer array.",
+  id="fact-extraction",
+  description="Extract named entities and key facts from a biographical passage.",
   problem_statement=(
-    "Write a function `binary_search(arr, target)` that returns the index of "
-    "the target in a sorted array, or -1 if the target is not present."
+    f"Read the passage below and extract all named entities (people, places, "
+    f"organisations, dates) and key facts. Group them by category.\n\n{passage}"
   ),
   ground_truth=(
-    "def binary_search(arr, target):\n"
-    "    lo, hi = 0, len(arr) - 1\n"
-    "    while lo <= hi:\n"
-    "        mid = (lo + hi) // 2\n"
-    "        if arr[mid] == target:\n"
-    "            return mid\n"
-    "        if arr[mid] < target:\n"
-    "            lo = mid + 1\n"
-    "        else:\n"
-    "            hi = mid - 1\n"
-    "    return -1"
+    "People: Marie Curie, Pierre Curie, Henri Becquerel\n"
+    "Places: Warsaw, Poland, Paris\n"
+    "Organisations: University of Paris\n"
+    "Dates: 1867, 1891, 1903, 1911\n"
+    "Awards: Nobel Prize in Physics (1903), Nobel Prize in Chemistry (1911)\n"
+    "Notable: first person to win Nobel Prize in two different sciences"
   ),
   test_cases=[
-    {"input": {"arr": [1, 3, 5, 7], "target": 5}, "expected": 2},
-    {"input": {"arr": [1, 3, 5, 7], "target": 6}, "expected": -1},
+    {"category": "people", "expected": ["Marie Curie", "Pierre Curie", "Henri Becquerel"]},
+    {"category": "dates", "expected": ["1867", "1891", "1903", "1911"]},
   ],
   difficulty=TaskDifficulty.MEDIUM,
 )
 
 trajectories = [
   Trajectory(
-    id="traj-correct",
+    id="traj-complete",
     task_id=task.id,
     content=(
-      "def binary_search(arr, target):\n"
-      "    lo, hi = 0, len(arr) - 1\n"
-      "    while lo <= hi:\n"
-      "        mid = (lo + hi) // 2\n"
-      "        if arr[mid] == target:\n"
-      "            return mid\n"
-      "        elif arr[mid] < target:\n"
-      "            lo = mid + 1\n"
-      "        else:\n"
-      "            hi = mid - 1\n"
-      "    return -1"
+      "People: Marie Curie, Pierre Curie, Henri Becquerel\n"
+      "Places: Warsaw (Poland), Paris\n"
+      "Organisations: University of Paris\n"
+      "Dates: 1867 (born), 1891 (moved to Paris), 1903 (Physics Nobel), 1911 (Chemistry Nobel)\n"
+      "Awards: Nobel Prize in Physics (1903), Nobel Prize in Chemistry (1911)\n"
+      "Notable: first person to win Nobel Prize in two different sciences"
     ),
-    output="[1,3,5,7],5 -> 2 | [1,3,5,7],6 -> -1",
     reward=1.0,
   ),
   Trajectory(
-    id="traj-linear",
+    id="traj-partial",
     task_id=task.id,
     content=(
-      "def binary_search(arr, target):\n"
-      "    for i, value in enumerate(arr):\n"
-      "        if value == target:\n"
-      "            return i\n"
-      "    return -1"
+      "People: Marie Curie, Pierre Curie\n"
+      "Places: Warsaw, Paris\n"
+      "Dates: 1903, 1911\n"
+      "Awards: Nobel Prize in Physics, Nobel Prize in Chemistry"
+      # Missing: Henri Becquerel, University of Paris, birth and arrival dates, notable fact
     ),
-    output="[1,3,5,7],5 -> 2 | [1,3,5,7],6 -> -1",
-    reward=0.7,
+    reward=0.5,
   ),
   Trajectory(
-    id="traj-buggy",
+    id="traj-wrong",
     task_id=task.id,
     content=(
-      "def binary_search(arr, target):\n"
-      "    lo, hi = 0, len(arr) - 1\n"
-      "    while lo < hi:\n"
-      "        mid = (lo + hi) // 2\n"
-      "        if arr[mid] < target:\n"
-      "            lo = mid + 1\n"
-      "        else:\n"
-      "            hi = mid\n"
-      "    return lo"
+      "People: Marie Curie, Pierre Curie\n"
+      "Places: Paris, France\n"
+      "Awards: Nobel Prize in Physics, Nobel Prize in Medicine\n"
+      # Missing: all dates, Henri Becquerel, University of Paris
+      # Hallucination: Nobel Prize in Medicine instead of Chemistry
     ),
-    output="[1,3,5,7],5 -> 2 | [1,3,5,7],6 -> 3  # wrong",
     reward=0.0,
   ),
 ]
@@ -261,13 +270,12 @@ print("Trajectories:", [trajectory.id for trajectory in trajectories])
 #
 # The Verifier is the better fit when evaluation can use stronger evidence:
 #
-# - test cases
-# - reference solutions
-# - expected outputs
+# - ground truth reference
+# - test cases with expected outputs
 # - execution results
 #
-# It can score a single trajectory, compare two trajectories, or evaluate a
-# whole candidate set.
+# Fact extraction is a good fit: we have a reference answer and expected
+# entity lists, so the Verifier can leverage them for precise scoring.
 
 # %% [markdown]
 # ### 3a. Instantiate the Verifier and score one trajectory
