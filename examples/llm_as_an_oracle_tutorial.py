@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""Jupytext-style tutorial for LLM as an Oracle.
-
-Open in a notebook environment that understands ``# %%`` cells.
-
-Prerequisite:
-    uv sync
-
-For cell-by-cell execution, make sure your notebook or editor kernel is using
-this project's ``.venv``.
-"""
-
 # %% [markdown]
 # # LLM as an Oracle: Tutorial
 #
