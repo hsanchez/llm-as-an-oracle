@@ -41,10 +41,10 @@ model = StubProvider(
   default_score_a="D",
   default_score_b="H",
   responses=[
-    StubResponse(score="B", score_a="B", score_b="G"),
-    StubResponse(score="D", score_a="D", score_b="H"),
-    StubResponse(score="A", score_a="A", score_b="F"),
-    StubResponse(score="E", score_a="C", score_b="J"),
+    StubResponse(score="B", score_a="B", score_b="G"),  # verifier-optimistic
+    StubResponse(score="D", score_a="D", score_b="H"),  # verifier-neutral
+    StubResponse(score="A", score_a="A", score_b="F"),  # judge-optimistic
+    StubResponse(score="E", score_a="C", score_b="J"),  # judge-neutral
   ],
   seed=42,
 )
