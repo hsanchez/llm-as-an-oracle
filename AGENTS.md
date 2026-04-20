@@ -95,19 +95,15 @@ When updating:
 - Do not append — integrate holistically; restructure if needed
 - Every word must serve the user; pro forma documentation is unacceptable
 
-### `docs/ARCHITECTURE.md`
+### `dev-docs/ARCHITECTURE.md`
 
 Live architectural overview. Update whenever the system design changes.
 
-### `docs/core/`
+### `dev-docs/core/`
 
 Frozen reference documentation — generated or otherwise locked. **Read only; never edit or add files here.**
 
-### `docs/slides/`
-
-Slides — locked. **Read only; never edit or add files here.**
-
-### `docs/decisions/`
+### `dev-docs/decisions/`
 
 Architecture Decision Records (ADRs). Records *why* core decisions were made.
 Format: `NNN-short-name.md` (e.g., `001-mvp-scope.md`)
@@ -119,6 +115,10 @@ Create a new ADR when:
 - Establishing patterns that affect multiple components
 
 Not every small choice — only significant architectural decisions.
+
+### `docs/slides/`
+
+Slides — locked. **Read only; never edit or add files here.**
 
 ## Git & Commits
 
