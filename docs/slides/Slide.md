@@ -279,61 +279,9 @@ This matters because Oracle is not only selecting an evaluator.
 It is also making that choice auditable.
 
 
-## Slide 16: Suggested Tutorial Flow for New Users
+## Slide 16: Limitations
 
-If you are new to the repo, use this sequence:
-
-1. Run the offline demo
-2. Route a clearly verifiable task
-3. Route a clearly open-ended task
-4. Compare Judge and Verifier on the same task
-5. Read the routing signals and reasoning
-6. Inspect the tests to understand expected behavior
-
-This teaches both the concept and the mechanics.
-
-
-## Slide 17: Research Framing
-
-For researchers, the interesting question is not just:
-
-- "Can an LLM evaluate another LLM?"
-
-It is:
-
-- "Which evaluation regime is appropriate for which task?"
-- "Can routing improve evaluation reliability?"
-- "What signals predict when one evaluator outperforms another?"
-- "How should we measure evaluation hardness?"
-
-This repo treats Oracle as a hypothesis:
-
-- adaptive evaluator selection is better than evaluator monoculture
-
-
-## Slide 18: Engineering Framing
-
-For engineers, the value is operational.
-
-Oracle gives you:
-
-- a common interface over multiple evaluators
-- policy-based routing
-- inspectable decisions
-- harness-based comparison
-- a path to productionizing mixed evaluation workloads
-
-This is useful when you care about:
-
-- reliability
-- debuggability
-- cost-quality tradeoffs
-- evaluator specialization
-
-
-## Slide 19: Limitations
-
-This framing is useful, but not magic.
+LLM-as-an-Oracle is useful, but not magic.
 
 Limitations include:
 
@@ -346,23 +294,3 @@ Limitations include:
 The right mental model is:
 
 - adaptive evaluation, not omniscient evaluation
-
-
-## Slide 20: Takeaways
-
-- `Judge` and `Verifier` solve related but different evaluation problems.
-- `Verifier` is stronger for structured, evidence-grounded evaluation.
-- `Judge` remains valuable for open-ended, rubric-driven tasks.
-- `Oracle` is the orchestration layer that routes between them.
-- The main idea is not replacement. It is adaptive evaluator selection.
-
-
-## Slide 21: Discussion
-
-Questions worth discussing with this audience:
-
-- What task features best predict Judge vs Verifier success?
-- Should Oracle route to one evaluator, or combine both?
-- How should evaluation hardness be measured?
-- What are the failure modes of evaluator routing?
-- How should this scale to multi-agent or tool-augmented systems?

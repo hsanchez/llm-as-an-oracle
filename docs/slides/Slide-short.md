@@ -171,12 +171,3 @@ Suggested flow:
 2. inspect a routing decision
 3. compare Judge and Verifier
 4. read the routing signals and confidence
-
-
-## Slide 11: Main Takeaways
-
-- `Judge` and `Verifier` are complementary, not identical.
-- `Verifier` is stronger for structured, evidence-based evaluation.
-- `Judge` remains useful for holistic, open-ended evaluation.
-- `Oracle` is the adaptive layer that selects between them.
-- The key idea is evaluator orchestration, not evaluator monoculture.

@@ -393,61 +393,9 @@ class="slide level2">
 <p>This matters because Oracle is not only selecting an evaluator. It is
 also making that choice auditable.</p>
 </section>
-<section id="slide-16-suggested-tutorial-flow-for-new-users"
-class="slide level2">
-<h2>Slide 16: Suggested Tutorial Flow for New Users</h2>
-<p>If you are new to the repo, use this sequence:</p>
-<ol type="1">
-<li>Run the offline demo</li>
-<li>Route a clearly verifiable task</li>
-<li>Route a clearly open-ended task</li>
-<li>Compare Judge and Verifier on the same task</li>
-<li>Read the routing signals and reasoning</li>
-<li>Inspect the tests to understand expected behavior</li>
-</ol>
-<p>This teaches both the concept and the mechanics.</p>
-</section>
-<section id="slide-17-research-framing" class="slide level2">
-<h2>Slide 17: Research Framing</h2>
-<p>For researchers, the interesting question is not just:</p>
-<ul>
-<li>“Can an LLM evaluate another LLM?”</li>
-</ul>
-<p>It is:</p>
-<ul>
-<li>“Which evaluation regime is appropriate for which task?”</li>
-<li>“Can routing improve evaluation reliability?”</li>
-<li>“What signals predict when one evaluator outperforms another?”</li>
-<li>“How should we measure evaluation hardness?”</li>
-</ul>
-<p>This repo treats Oracle as a hypothesis:</p>
-<ul>
-<li>adaptive evaluator selection is better than evaluator
-monoculture</li>
-</ul>
-</section>
-<section id="slide-18-engineering-framing" class="slide level2">
-<h2>Slide 18: Engineering Framing</h2>
-<p>For engineers, the value is operational.</p>
-<p>Oracle gives you:</p>
-<ul>
-<li>a common interface over multiple evaluators</li>
-<li>policy-based routing</li>
-<li>inspectable decisions</li>
-<li>harness-based comparison</li>
-<li>a path to productionizing mixed evaluation workloads</li>
-</ul>
-<p>This is useful when you care about:</p>
-<ul>
-<li>reliability</li>
-<li>debuggability</li>
-<li>cost-quality tradeoffs</li>
-<li>evaluator specialization</li>
-</ul>
-</section>
-<section id="slide-19-limitations" class="slide level2">
-<h2>Slide 19: Limitations</h2>
-<p>This framing is useful, but not magic.</p>
+<section id="slide-16-limitations" class="slide level2">
+<h2>Slide 16: Limitations</h2>
+<p>LLM-as-an-Oracle is useful, but not magic.</p>
 <p>Limitations include:</p>
 <ul>
 <li>routing quality depends on the signals and policies</li>
@@ -459,32 +407,6 @@ monoculture</li>
 <p>The right mental model is:</p>
 <ul>
 <li>adaptive evaluation, not omniscient evaluation</li>
-</ul>
-</section>
-<section id="slide-20-takeaways" class="slide level2">
-<h2>Slide 20: Takeaways</h2>
-<ul>
-<li><code>Judge</code> and <code>Verifier</code> solve related but
-different evaluation problems.</li>
-<li><code>Verifier</code> is stronger for structured, evidence-grounded
-evaluation.</li>
-<li><code>Judge</code> remains valuable for open-ended, rubric-driven
-tasks.</li>
-<li><code>Oracle</code> is the orchestration layer that routes between
-them.</li>
-<li>The main idea is not replacement. It is adaptive evaluator
-selection.</li>
-</ul>
-</section>
-<section id="slide-21-discussion" class="slide level2">
-<h2>Slide 21: Discussion</h2>
-<p>Questions worth discussing with this audience:</p>
-<ul>
-<li>What task features best predict Judge vs Verifier success?</li>
-<li>Should Oracle route to one evaluator, or combine both?</li>
-<li>How should evaluation hardness be measured?</li>
-<li>What are the failure modes of evaluator routing?</li>
-<li>How should this scale to multi-agent or tool-augmented systems?</li>
 </ul>
 </section>
     </div>
