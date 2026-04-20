@@ -3,9 +3,32 @@ name = "llm-as-oracle"
 version = "0.1.0"
 description = "LLM as Verifier · LLM as Judge · Evaluation Harness · Intelligent Router"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
+authors = [
+  { name = "Huascar Sanchez", email = "huascar@jellyfish.mozmail.com" },
+]
+keywords = [
+  "language-models",
+  "llm-evaluation",
+  "llm-as-a-judge",
+  "llm-as-a-verifier",
+  "evaluation-harness",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
+]
 
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/hsanchez/llm-as-oracle"
+Repository = "https://github.com/hsanchez/llm-as-oracle"
+Issues = "https://github.com/hsanchez/llm-as-oracle/issues"
 
 [project.optional-dependencies]
 openai = ["openai>=1.0"]

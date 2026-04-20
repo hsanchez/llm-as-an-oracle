@@ -4,7 +4,7 @@
 
 1. Fork the repository and clone your fork.
 2. Install dependencies: `uv sync`
-3. Run the test suite to confirm everything works: `uv run python main.py test`
+3. Run the test suite to confirm everything works: `uv run python -m llm_oracle test`
 
 ## Reporting Issues
 
@@ -15,7 +15,7 @@
 
 1. Create a branch from `main`: `git checkout -b your-feature`
 2. Make your changes and add tests where applicable.
-3. Ensure all tests pass: `uv run python main.py test`
+3. Ensure all tests pass: `uv run python -m llm_oracle test`
 4. Open a PR against `main` and fill out the PR template.
 
 ## Coding Standards

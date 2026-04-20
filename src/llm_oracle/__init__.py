@@ -1,64 +1,8 @@
-"""LLM Oracle — LLM-as-a-Verifier · LLM-as-a-Judge · Intelligent Router.
+"""Top-level public API for llm_oracle.
 
-This package provides a modern, elegant Python implementation of two
-complementary LLM evaluation strategies and an intelligent routing layer
-that automatically selects the right strategy for each task.
-
-Quick-start
------------
->>> from llm_oracle import (
-...     OracleRouter, VerifierStrategy, JudgeStrategy,
-...     EvaluationHarness, EvaluationCriterion,
-...     Task, Trajectory, ScoringConfig,
-...     StubProvider, TaskDifficulty,
-... )
->>>
->>> # 1. Build a shared stub provider (swap for OpenAIProvider / GeminiProvider)
->>> model   = StubProvider(default_score="C", default_score_a="C", default_score_b="E")
->>> config  = ScoringConfig(granularity=20, num_verifications=2, num_criteria=2)
->>> criteria = [
-...     EvaluationCriterion("correctness", "Correctness", "Is the solution correct?"),
-...     EvaluationCriterion("clarity",     "Clarity",     "Is the solution clear?"),
-... ]
->>>
->>> # 2. Instantiate both strategies
->>> verifier = VerifierStrategy(model, config, criteria)
->>> judge    = JudgeStrategy(model, config, criteria)
->>>
->>> # 3. Create the router with the default five-policy chain
->>> router = OracleRouter.default(verifier, judge)
->>>
->>> # 4. Define a task and some candidate trajectories
->>> task = Task(
-...     id="task-1",
-...     description="Sort a list of integers",
-...     problem_statement="Write a function that sorts a list of integers in ascending order.",
-...     difficulty=TaskDifficulty.EASY,
-... )
->>> trajectories = [
-...     Trajectory("t1", "task-1", "def sort_list(lst): return sorted(lst)"),
-...     Trajectory("t2", "task-1", "def sort_list(lst): lst.sort(); return lst"),
-... ]
->>>
->>> # 5. Route and evaluate in one call
->>> result, decision = router.evaluate(task, trajectories)
->>> print(decision.selected_strategy, decision.confidence)
->>> print(result.best_trajectory_id)
-
-Package layout
---------------
-llm_oracle/
-├── core/
-│   ├── models.py       — Data-model dataclasses (Task, Trajectory, …)
-│   ├── strategy.py     — Abstract BaseStrategy + LanguageModel protocol
-│   └── providers.py    — OpenAI, Anthropic, Gemini, and Stub providers
-├── strategies/
-│   ├── verifier.py     — LLM-as-a-Verifier (logprob + tournament selection)
-│   └── judge.py        — LLM-as-a-Judge  (rubric + chain-of-thought)
-├── evaluation/
-│   └── harness.py      — Side-by-side hardness comparison harness
-└── routing/
-    └── router.py       — Signal-based policy-chain router
+This package exposes the main workflow objects for building Judge, Verifier,
+Harness, and Oracle-based evaluation pipelines. Advanced routing, provider,
+and base-abstraction names are also available here for convenience.
 """
 
 from __future__ import annotations

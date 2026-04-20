@@ -18,7 +18,7 @@
 # %% [markdown]
 # ## 0. Import the public API
 #
-# This tutorial imports only the user-facing API.
+# This tutorial uses the common top-level import set.
 #
 # The imported names fall into a few groups:
 #
@@ -27,6 +27,10 @@
 # - orchestration and analysis tools such as `OracleRouter` and
 #   `EvaluationHarness`
 # - the offline demo model `StubProvider`
+#
+# `llm_oracle` also exposes advanced routing types, provider-registration
+# helpers, and base abstractions from the top level. Those are part of the
+# public API, but they are not needed for the main workflow shown here.
 
 # %%
 from __future__ import annotations

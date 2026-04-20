@@ -1,4 +1,4 @@
-"""LLM Oracle — CLI implementation (importable by __main__.py and main.py)."""
+"""LLM Oracle CLI implementation."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def _import_oracle():
     _err(
       "Make sure you are running from the project root and that the package is on your Python path."
     )
-    _err("Try:  uv run python main.py <command>")
+    _err("Try:  uv run python -m llm_oracle <command>")
     sys.exit(1)
 
 

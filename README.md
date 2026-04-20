@@ -26,6 +26,38 @@ This repository therefore treats `LLM-as-an-Oracle` as an orchestration layer:
 - it compares them in a shared evaluation harness
 - it routes tasks to one or the other based on task signals
 
+## Public API
+
+`llm_oracle` exposes a broad top-level public API on purpose.
+
+Most users should start with this common import set:
+
+```python
+from llm_oracle import (
+  EvaluationCriterion,
+  EvaluationHarness,
+  JudgeStrategy,
+  OracleRouter,
+  ScoringConfig,
+  StubProvider,
+  Task,
+  TaskDifficulty,
+  Trajectory,
+  VerifierStrategy,
+)
+```
+
+Advanced names remain available from the top level when you need them:
+
+- routing internals such as `RoutingPolicy`, `PolicyChain`, `SignalExtractor`, and `DetailedRoutingDecision`
+- provider extension hooks such as `create_provider`, `get_provider`, and `register_provider`
+- lower-level abstractions such as `BaseStrategy` and `LanguageModel`
+
+The policy is convenience first:
+
+- the common set is the default user-facing surface
+- advanced names are still public, but not the first thing new users need to learn
+
 ## How the Oracle Works
 
 `OracleRouter` is a deterministic routing layer that decides whether a task
@@ -91,16 +123,16 @@ At the harness level, `EvaluationHarness` computes:
 
 ```bash
 # Run the offline demo (no API keys needed)
-uv run python main.py demo
+uv run python -m llm_oracle demo
 
 # Route a task and inspect the decision
-uv run python main.py route --task "Implement quicksort" --difficulty hard --ground-truth
+uv run python -m llm_oracle route --task "Implement quicksort" --difficulty hard --ground-truth
 
 # Compare both strategies on a task
-uv run python main.py compare --task "Explain merge sort" --trajectories 3
+uv run python -m llm_oracle compare --task "Explain merge sort" --trajectories 3
 
 # Run the test suite (148 tests)
-uv run python main.py test
+uv run python -m llm_oracle test
 ```
 
 ## Development Setup
