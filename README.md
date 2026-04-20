@@ -8,6 +8,7 @@ This repository combines two related evaluation paradigms:
 The `LLM-as-a-Verifier` framing used here is inspired by **"LLM-as-a-Verifier: A
 General-Purpose Verification Framework"**:
 
+- [LLM-as-a-Test-Oracle](https://dl.acm.org/doi/10.1145/3650212.3680308)
 - [LLM-as-a-Verifier](https://llm-as-a-verifier.notion.site/)
 
 That project presents Verifier as an improvement over standard Judge-style
