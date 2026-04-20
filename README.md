@@ -117,3 +117,7 @@ This repository uses a local `.venv`. If your editor reports imports like
 ```
 
 The workspace is configured for VS Code / Cursor to prefer that interpreter.
+
+## 📌 Citation
+
+Please cite the `llm-as-an-oracle` tool itself following [CITATION.cff](./CITATION.cff) file.
