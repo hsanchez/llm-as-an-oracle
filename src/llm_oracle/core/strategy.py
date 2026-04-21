@@ -1,8 +1,4 @@
-"""Base strategy abstract class for LLM evaluation strategies.
-
-This module defines the abstract base class for all evaluation strategies,
-providing a common interface for verifier and judge implementations.
-"""
+"""Abstract base class for LLM evaluation strategies."""
 
 from __future__ import annotations
 
@@ -35,15 +31,9 @@ class LanguageModel(Protocol):
   ) -> tuple[str, list[Any] | None, list[Any] | None]:
     """Generate text from prompt.
 
-    Args:
-      prompt: Input prompt
-      temperature: Sampling temperature
-      max_tokens: Maximum tokens to generate
-      return_logprobs: Whether to return log probabilities
-      **kwargs: Additional model-specific parameters
-
     Returns:
-      Tuple of (generated_text, tokens, logprobs)
+      ``(generated_text, tokens, logprobs)`` — logprob fields are ``None``
+      when ``return_logprobs=False`` or unavailable.
     """
     ...
 
@@ -61,24 +51,12 @@ class BaseStrategy(abc.ABC):
     config: ScoringConfig,
     criteria: list[EvaluationCriterion],
   ):
-    """Initialize the strategy.
-
-    Args:
-      model: Language model to use for evaluation
-      config: Configuration for scoring behavior
-      criteria: List of evaluation criteria to use
-    """
     self.model = model
     self.config = config
     self.criteria = criteria
     self._validate_config()
 
   def _validate_config(self) -> None:
-    """Validate configuration parameters.
-
-    Raises:
-      ValueError: If configuration is invalid
-    """
     if self.config.granularity < 2:
       raise ValueError(f"Granularity must be at least 2, got {self.config.granularity}")
 
@@ -102,16 +80,8 @@ class BaseStrategy(abc.ABC):
   ) -> EvaluationResult:
     """Evaluate trajectories for a given task.
 
-    Args:
-      task: The task being evaluated
-      trajectories: List of candidate trajectories
-      **kwargs: Additional strategy-specific parameters
-
-    Returns:
-      Complete evaluation result with scores and best trajectory
-
     Raises:
-      ValueError: If trajectories list is empty or invalid
+      ValueError: If trajectories list is empty or invalid.
     """
     pass
 
@@ -123,17 +93,7 @@ class BaseStrategy(abc.ABC):
     criterion: EvaluationCriterion,
     **kwargs: Any,
   ) -> ScoreResult:
-    """Score a single trajectory against a criterion.
-
-    Args:
-      task: The task being evaluated
-      trajectory: The trajectory to score
-      criterion: Evaluation criterion to use
-      **kwargs: Additional strategy-specific parameters
-
-    Returns:
-      Score result with normalized score and metadata
-    """
+    """Score a single trajectory against a criterion."""
     pass
 
   @abc.abstractmethod
@@ -145,27 +105,12 @@ class BaseStrategy(abc.ABC):
     criterion: EvaluationCriterion,
     **kwargs: Any,
   ) -> PairwiseComparison:
-    """Compare two trajectories pairwise.
-
-    Args:
-      task: The task being evaluated
-      trajectory_a: First trajectory
-      trajectory_b: Second trajectory
-      criterion: Criterion for comparison
-      **kwargs: Additional strategy-specific parameters
-
-    Returns:
-      Pairwise comparison result with scores for both
-    """
+    """Compare two trajectories pairwise."""
     pass
 
   @abc.abstractmethod
   def get_strategy_type(self) -> StrategyType:
-    """Return the type of this strategy.
-
-    Returns:
-      StrategyType enum value
-    """
+    """Return the type of this strategy."""
     pass
 
   def select_best_trajectory(
@@ -174,18 +119,9 @@ class BaseStrategy(abc.ABC):
     trajectories: TrajectoryList,
     scores: dict[str, ScoreResult],
   ) -> str:
-    """Select the best trajectory based on scores.
+    """Return the ID of the highest-scored trajectory.
 
-    Default implementation selects trajectory with highest average score.
     Subclasses can override for custom selection logic.
-
-    Args:
-      task: The task being evaluated
-      trajectories: List of candidate trajectories
-      scores: Scores for each trajectory
-
-    Returns:
-      ID of the best trajectory
     """
     if not trajectories:
       raise ValueError("Cannot select from empty trajectory list")
@@ -201,16 +137,7 @@ class BaseStrategy(abc.ABC):
     self,
     criterion_scores: dict[str, float],
   ) -> float:
-    """Aggregate scores across criteria into a single score.
-
-    Default implementation computes weighted average based on criterion weights.
-
-    Args:
-      criterion_scores: Scores per criterion ID
-
-    Returns:
-      Aggregated score (0.0-1.0)
-    """
+    """Return a weighted average of per-criterion scores."""
     if not criterion_scores:
       return 0.5
 
@@ -228,11 +155,7 @@ class BaseStrategy(abc.ABC):
     return weighted_sum / total_weight if total_weight > 0 else 0.5
 
   def get_scale_description(self) -> dict[str, Any]:
-    """Get description of the scoring scale.
-
-    Returns:
-      Dictionary describing the scale levels and valid tokens
-    """
+    """Return scale levels and valid score tokens for the current granularity."""
     g = self.config.granularity
 
     # Generate letter-based scale (A-Z for up to 26 levels)
@@ -262,14 +185,6 @@ class BaseStrategy(abc.ABC):
       }
 
   def _generate_scale_description(self, granularity: int) -> str:
-    """Generate a human-readable scale description.
-
-    Args:
-      granularity: Number of scale levels
-
-    Returns:
-      Scale description text
-    """
     if granularity == 20:
       return (
         "Rate how likely the agent correctly solved the task on a "
@@ -299,16 +214,7 @@ class BaseStrategy(abc.ABC):
     min_val: float | None = None,
     max_val: float | None = None,
   ) -> float:
-    """Normalize a raw score to [0, 1] range.
-
-    Args:
-      raw_score: Raw score value
-      min_val: Minimum possible value (defaults to 1)
-      max_val: Maximum possible value (defaults to granularity)
-
-    Returns:
-      Normalized score in [0, 1]
-    """
+    """Normalize raw_score to [0, 1]; min_val defaults to 1, max_val to granularity."""
     if min_val is None:
       min_val = 1.0
     if max_val is None:

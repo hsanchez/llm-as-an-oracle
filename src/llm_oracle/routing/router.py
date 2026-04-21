@@ -1,33 +1,7 @@
-"""Intelligent task router for LLM Oracle evaluation strategies.
+"""Signal-based routing layer that selects between the Verifier and Judge strategies.
 
-This module implements a composable routing layer that decides — for each
-incoming (task, trajectories) pair — whether to forward evaluation to the
-**LLM-as-a-Verifier** or the **LLM-as-a-Judge** strategy.
-
-Design Principles
------------------
-* **Signal-based routing** — every routing policy is a self-contained
-  ``RoutingPolicy`` that extracts named *signals* from a task and emits a
-  soft preference score.  Multiple policies are composed by a ``PolicyChain``
-  that aggregates their votes.
-
-* **No LLM calls in the hot path** — all built-in policies are deterministic
-  and O(1).  An optional ``LLMRoutingPolicy`` may make a single lightweight
-  model call for tasks that other policies cannot classify with sufficient
-  confidence.
-
-* **Fully auditable** — every ``RoutingDecision`` carries the raw signal
-  values, per-policy votes, and the final confidence so callers can trace
-  exactly why a strategy was chosen.
-
-* **Open for extension** — registering a new policy is one decorator call:
-  ``@router.register_policy``.
-
-Typical Usage
--------------
->>> router = OracleRouter.default(verifier, judge)
->>> result  = router.route(task, trajectories)
->>> print(result.selected_strategy, result.confidence)
+Policies are deterministic and O(1); each casts a soft vote aggregated by a
+PolicyChain. Every decision is fully auditable via DetailedRoutingDecision.
 """
 
 from __future__ import annotations
@@ -127,24 +101,9 @@ _JUDGEMENT_KEYWORDS: frozenset[str] = frozenset(
 class RoutingSignals:
   """Named feature signals extracted from a task for routing decisions.
 
-  Each signal is a float in ``[0, 1]`` unless noted otherwise.
-
-  When ``prior_hardness`` is set, :class:`PriorHardnessPolicy` (weight=1.8,
-  the highest in the default chain) will typically dominate the routing
-  decision; other signals still vote but rarely flip the outcome.
-
-  Attributes:
-    has_ground_truth:           1.0 if the task has a ground-truth solution.
-    has_test_cases:             1.0 if the task has formal test cases.
-    trajectory_count:           Raw candidate count (not clipped to [0, 1]).
-    stated_difficulty:          0=easy, 0.5=medium or unknown, 1=hard.
-    verifiable_keyword_density: Fraction of verifiable-domain keywords in the
-                                problem statement.
-    judgement_keyword_density:  Same for open-ended/judgment keywords.
-    problem_length:             Normalized statement length (capped at 2,000 chars).
-    output_available:           1.0 if any trajectory has an ``output`` field.
-    prior_hardness:             Cached hardness score from the harness; ``None``
-                                if unavailable.  Dominates routing when set.
+  All fields are floats in ``[0, 1]`` except ``trajectory_count`` (raw int)
+  and ``prior_hardness`` (``None`` when unavailable). When ``prior_hardness``
+  is set, ``PriorHardnessPolicy`` (w=1.8) typically dominates.
   """
 
   has_ground_truth: float = 0.0
@@ -162,19 +121,8 @@ class RoutingSignals:
 class PolicyVote:
   """A single policy's routing vote.
 
-  :class:`PolicyChain` scores each strategy as ``sum(confidence * weight)``
-  across all votes for that strategy, then picks the highest.  ``confidence``
-  is also checked against ``PolicyChain.confidence_threshold`` (default 0.6)
-  to filter weak votes before aggregation.
-
-  Attributes:
-    policy_name:  Human-readable policy identifier.
-    preferred:    Strategy this policy votes for.
-    confidence:   Vote strength in ``[0.0, 1.0]``.  Below the chain threshold,
-                  the vote is treated as an abstention.
-    weight:       Policy importance in the chain (default 1.0).
-    signals_used: Signal names that drove this vote.
-    reasoning:    Free-form explanation.
+  PolicyChain aggregates as ``sum(confidence * weight)`` per strategy.
+  Votes below ``confidence_threshold`` are treated as abstentions.
   """
 
   policy_name: str
@@ -210,16 +158,7 @@ class RoutingPolicy(abc.ABC):
     trajectories: TrajectoryList,
     signals: RoutingSignals,
   ) -> PolicyVote:
-    """Cast a routing vote.
-
-    Args:
-      task:         Task to be evaluated.
-      trajectories: Candidate trajectories.
-      signals:      Pre-computed routing signals.
-
-    Returns:
-      A :class:`PolicyVote` with preferred strategy and confidence.
-    """
+    """Cast a routing vote for the preferred strategy."""
 
   def __repr__(self) -> str:
     return f"{self.__class__.__name__}(name={self.name!r}, weight={self.weight})"
@@ -568,18 +507,10 @@ class OutputAvailabilityPolicy(RoutingPolicy):
 
 
 class PolicyChain:
-  """Aggregates votes from multiple :class:`RoutingPolicy` instances.
+  """Aggregates votes from multiple RoutingPolicy instances.
 
-  Each policy casts a soft vote (preferred strategy + confidence).  The chain
-  computes a weighted confidence score for each strategy and picks the winner.
-
-  If no policy meets the ``confidence_threshold``, the chain returns the
-  ``fallback_strategy``.
-
-  Args:
-    policies:             Ordered list of routing policies.
-    confidence_threshold: Minimum aggregate confidence required to commit.
-    fallback_strategy:    Strategy returned when confidence is too low.
+  Computes weighted confidence per strategy and picks the winner. Falls back
+  to ``fallback_strategy`` when no policy reaches ``confidence_threshold``.
   """
 
   def __init__(
@@ -603,16 +534,7 @@ class PolicyChain:
     trajectories: TrajectoryList,
     signals: RoutingSignals,
   ) -> tuple[StrategyType, float, list[PolicyVote], str]:
-    """Run all policies and aggregate their votes.
-
-    Args:
-      task:         Task being routed.
-      trajectories: Candidate trajectories.
-      signals:      Pre-computed routing signals.
-
-    Returns:
-      4-tuple of ``(selected_strategy, confidence, votes, reasoning)``.
-    """
+    """Run all policies and return ``(strategy, confidence, votes, reasoning)``."""
     votes: list[PolicyVote] = [
       policy.vote(task, trajectories, signals) for policy in self._policies
     ]
@@ -660,14 +582,7 @@ class PolicyChain:
 
   @staticmethod
   def _aggregate(votes: list[PolicyVote]) -> tuple[float, float]:
-    """Compute weighted confidence totals for each strategy.
-
-    Args:
-      votes: Policy votes to aggregate.
-
-    Returns:
-      ``(verifier_total, judge_total)`` weighted scores.
-    """
+    """Return ``(verifier_total, judge_total)`` weighted confidence scores."""
     verifier_total = 0.0
     judge_total = 0.0
     for vote in votes:
@@ -684,16 +599,6 @@ class PolicyChain:
     votes: list[PolicyVote],
     confidence: float,
   ) -> str:
-    """Compose a human-readable reasoning string from all votes.
-
-    Args:
-      winner:     Winning strategy.
-      votes:      All policy votes.
-      confidence: Aggregate confidence.
-
-    Returns:
-      Multi-line reasoning string.
-    """
     lines = [
       f"Selected {winner.value} with confidence {confidence:.3f}.",
       "",
@@ -728,16 +633,7 @@ class SignalExtractor:
     *,
     prior_hardness: float | None = None,
   ) -> RoutingSignals:
-    """Extract routing signals.
-
-    Args:
-      task:           Task to analyze.
-      trajectories:   Candidate trajectories.
-      prior_hardness: Optional cached hardness score.
-
-    Returns:
-      Populated :class:`RoutingSignals` instance.
-    """
+    """Extract routing signals from a task and its trajectories."""
     text = (task.problem_statement + " " + task.description).lower()
     words = set(re.findall(r"\b\w+\b", text))
 
@@ -777,13 +673,7 @@ class SignalExtractor:
 
 @dataclass
 class DetailedRoutingDecision(RoutingDecision):
-  """Extends :class:`RoutingDecision` with per-policy audit information.
-
-  Attributes:
-    policy_votes:  Individual vote from each policy in the chain.
-    signals:       Raw signals that were fed to the policies.
-    elapsed_ms:    Time taken to compute the routing decision (milliseconds).
-  """
+  """RoutingDecision extended with per-policy votes, signals, and latency."""
 
   policy_votes: list[PolicyVote] = field(default_factory=list)
   signals: RoutingSignals = field(default_factory=RoutingSignals)
@@ -796,20 +686,7 @@ class DetailedRoutingDecision(RoutingDecision):
 
 
 class OracleRouter:
-  """Routes evaluation tasks to the verifier or judge strategy.
-
-  The router extracts :class:`RoutingSignals` from each task, runs them
-  through a :class:`PolicyChain`, and dispatches evaluation to the winning
-  strategy's ``evaluate`` method.
-
-  Args:
-    verifier:        Verifier strategy instance.
-    judge:           Judge strategy instance.
-    policy_chain:    Chain of routing policies to consult.
-    signal_extractor: Extracts signals from task + trajectories.
-    hardness_cache:  Optional pre-populated ``{task_id: hardness}`` cache
-                     (updated in-place as tasks are evaluated).
-  """
+  """Routes evaluation tasks to the verifier or judge strategy via a PolicyChain."""
 
   def __init__(
     self,
@@ -837,24 +714,11 @@ class OracleRouter:
     hardness_cache: dict[str, float] | None = None,
     confidence_threshold: float = _CONFIDENCE_THRESHOLD,
   ) -> OracleRouter:
-    """Create a router with the default five-policy chain.
+    """Create a router with the default six-policy chain.
 
-    Default policy order (highest weight first):
-      1. ``prior_hardness``     (w=1.8)
-      2. ``ground_truth``       (w=2.0)
-      3. ``keyword_domain``     (w=1.5)
-      4. ``difficulty``         (w=1.0)
-      5. ``output_availability``(w=0.9)
-      6. ``trajectory_count``   (w=0.8)
-
-    Args:
-      verifier:             Verifier strategy.
-      judge:                Judge strategy.
-      hardness_cache:       Optional pre-populated hardness cache.
-      confidence_threshold: Override the default confidence threshold.
-
-    Returns:
-      Fully configured :class:`OracleRouter`.
+    Policy weights: prior_hardness(1.8), ground_truth(2.0),
+    keyword_domain(1.5), difficulty(1.0), output_availability(0.9),
+    trajectory_count(0.8).
     """
     policies: list[RoutingPolicy] = [
       PriorHardnessPolicy(),
@@ -877,15 +741,7 @@ class OracleRouter:
     verifier: BaseStrategy,
     judge: BaseStrategy,
   ) -> OracleRouter:
-    """Create a router that always selects the verifier (useful for ablation).
-
-    Args:
-      verifier: Verifier strategy.
-      judge:    Judge strategy (retained for interface compatibility).
-
-    Returns:
-      :class:`OracleRouter` wired to always pick the verifier.
-    """
+    """Create a router that always selects the verifier (ablation mode)."""
 
     class _AlwaysVerifierPolicy(RoutingPolicy):
       name = "always_verifier"
@@ -907,15 +763,7 @@ class OracleRouter:
     verifier: BaseStrategy,
     judge: BaseStrategy,
   ) -> OracleRouter:
-    """Create a router that always selects the judge (useful for ablation).
-
-    Args:
-      verifier: Verifier strategy (retained for interface compatibility).
-      judge:    Judge strategy.
-
-    Returns:
-      :class:`OracleRouter` wired to always pick the judge.
-    """
+    """Create a router that always selects the judge (ablation mode)."""
 
     class _AlwaysJudgePolicy(RoutingPolicy):
       name = "always_judge"
@@ -938,16 +786,7 @@ class OracleRouter:
     task: Task,
     trajectories: TrajectoryList,
   ) -> DetailedRoutingDecision:
-    """Compute a routing decision without running evaluation.
-
-    Args:
-      task:         Task to route.
-      trajectories: Candidate trajectories.
-
-    Returns:
-      :class:`DetailedRoutingDecision` describing which strategy was selected
-      and why.
-    """
+    """Compute a routing decision without running evaluation."""
     t0 = time.perf_counter()
 
     prior_hardness = self._hardness_cache.get(task.id)
@@ -975,14 +814,7 @@ class OracleRouter:
     task: Task,
     trajectories: TrajectoryList,
   ) -> tuple[EvaluationResult, DetailedRoutingDecision]:
-    """Route *and* evaluate a task in one call.
-
-    Args:
-      task:         Task to evaluate.
-      trajectories: Candidate trajectories.
-
-    Returns:
-      2-tuple of ``(EvaluationResult, DetailedRoutingDecision)``.
+    """Route and evaluate a task; returns ``(EvaluationResult, DetailedRoutingDecision)``.
 
     Raises:
       ValueError: If ``trajectories`` is empty.
@@ -1004,17 +836,7 @@ class OracleRouter:
     *,
     position: int | None = None,
   ) -> OracleRouter:
-    """Register an additional routing policy.
-
-    Policies are added to the internal :class:`PolicyChain`.
-
-    Args:
-      policy:   Policy to add.
-      position: Optional insertion index (appended if omitted).
-
-    Returns:
-      ``self`` for fluent chaining.
-    """
+    """Add a policy to the chain; returns ``self`` for fluent chaining."""
     policies = list(self._chain.policies)
     if position is None:
       policies.append(policy)
@@ -1029,15 +851,7 @@ class OracleRouter:
     return self
 
   def update_hardness(self, task_id: str, hardness: float) -> None:
-    """Update the hardness cache for a task.
-
-    Called automatically by the harness; can also be called manually to
-    pre-populate the cache from an earlier run.
-
-    Args:
-      task_id:  Task identifier.
-      hardness: Hardness score in [0, 1].
-    """
+    """Update the hardness cache for a task (called automatically by the harness)."""
     if not 0.0 <= hardness <= 1.0:
       raise ValueError(f"Hardness must be in [0, 1], got {hardness}")
     self._hardness_cache[task_id] = hardness
@@ -1050,11 +864,7 @@ class OracleRouter:
     return list(self._decision_log)
 
   def routing_summary(self) -> str:
-    """Render a compact audit of all past routing decisions.
-
-    Returns:
-      Multi-line summary string.
-    """
+    """Render a compact audit table of all past routing decisions."""
     if not self._decision_log:
       return "No routing decisions recorded yet."
 
@@ -1087,13 +897,7 @@ class OracleRouter:
   # ── Private helpers ──────────────────────────────────────────────────────────
 
   def _resolve_strategy(self, strategy_type: StrategyType) -> BaseStrategy:
-    """Map a :class:`StrategyType` to the corresponding strategy instance.
-
-    Args:
-      strategy_type: Desired strategy type.
-
-    Returns:
-      The verifier or judge strategy instance.
+    """Map a StrategyType to the corresponding strategy instance.
 
     Raises:
       ValueError: For unknown strategy types.

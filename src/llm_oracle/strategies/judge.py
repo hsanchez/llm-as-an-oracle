@@ -1,21 +1,4 @@
-"""LLM as Judge strategy implementation.
-
-This module implements the LLM-as-a-Judge approach, which evaluates trajectories
-holistically using rubric-based scoring with structured reasoning chains. Unlike
-the Verifier, the Judge produces a single discrete score per trajectory via
-explicit chain-of-thought reasoning, without relying on log probabilities.
-
-Key characteristics:
-  - Holistic, rubric-anchored evaluation (no logprob dependency)
-  - Positional-bias mitigation via score normalization across swap orderings
-  - Reference-guided and reference-free modes
-  - Criteria aggregation via weighted rubric scoring
-
-Reference:
-  Zheng, L., Chiang, W.-L., Sheng, Y., et al. (2023). Judging LLM-as-a-Judge
-  with MT-Bench and Chatbot Arena. arXiv:2306.05685.
-  https://arxiv.org/abs/2306.05685
-"""
+"""LLM-as-a-Judge strategy: rubric-based holistic scoring without log-probability access."""
 
 from __future__ import annotations
 
@@ -137,7 +120,6 @@ class JudgeStrategy(BaseStrategy):
   # ------------------------------------------------------------------ #
 
   def get_strategy_type(self) -> StrategyType:
-    """Return ``StrategyType.JUDGE``."""
     return StrategyType.JUDGE
 
   def evaluate(
@@ -146,20 +128,7 @@ class JudgeStrategy(BaseStrategy):
     trajectories: TrajectoryList,
     **kwargs: Any,
   ) -> EvaluationResult:
-    """Evaluate a list of trajectories with the judge strategy.
-
-    Trajectories are first scored pointwise across all criteria and
-    verification repeats; ties are broken via pairwise comparisons.
-
-    Args:
-      task: Task being evaluated.
-      trajectories: Candidate trajectories (n >= 1).
-      **kwargs: Forwarded to ``score_trajectory`` and
-        ``compare_trajectories``.
-
-    Returns:
-      :class:`~llm_oracle.core.models.EvaluationResult` with overall scores,
-      all pairwise comparisons, and the selected best trajectory.
+    """Evaluate trajectories with pointwise scoring and pairwise tie-breaking.
 
     Raises:
       ValueError: If ``trajectories`` is empty.
@@ -207,17 +176,7 @@ class JudgeStrategy(BaseStrategy):
     criterion: EvaluationCriterion,
     **kwargs: Any,
   ) -> ScoreResult:
-    """Score a single trajectory against a single criterion.
-
-    Args:
-      task: Task being evaluated.
-      trajectory: Trajectory to score.
-      criterion: Criterion to evaluate against.
-      **kwargs: Forwarded to the model's ``generate`` call.
-
-    Returns:
-      :class:`~llm_oracle.core.models.ScoreResult` for this criterion.
-    """
+    """Score a trajectory against one criterion via pointwise rubric."""
     prompt = self._build_pointwise_prompt(task, trajectory, criterion)
 
     text, _, _ = self.model.generate(
@@ -255,23 +214,7 @@ class JudgeStrategy(BaseStrategy):
     criterion: EvaluationCriterion,
     **kwargs: Any,
   ) -> PairwiseComparison:
-    """Compare two trajectories for a given criterion.
-
-    When ``swap_pairwise`` is enabled, the comparison is performed twice
-    (original and swapped order); final scores are the mean of both runs to
-    mitigate positional bias.
-
-    Args:
-      task: Task being evaluated.
-      trajectory_a: First trajectory.
-      trajectory_b: Second trajectory.
-      criterion: Criterion to compare against.
-      **kwargs: Forwarded to the model's ``generate`` call.
-
-    Returns:
-      :class:`~llm_oracle.core.models.PairwiseComparison` with bias-mitigated
-      scores and a declared winner.
-    """
+    """Compare two trajectories; when ``swap_pairwise`` is set, runs twice and averages to cancel positional bias."""
     gen_kwargs = {
       "temperature": kwargs.get(
         "temperature", self.config.temperature if self.config.temperature is not None else 0.0
@@ -323,16 +266,6 @@ class JudgeStrategy(BaseStrategy):
     trajectory: Trajectory,
     criterion: EvaluationCriterion,
   ) -> str:
-    """Construct a pointwise scoring prompt.
-
-    Args:
-      task: Task being evaluated.
-      trajectory: Trajectory to evaluate.
-      criterion: Evaluation criterion.
-
-    Returns:
-      Formatted prompt string.
-    """
     rubric_lines = "\n".join(f"  {score}: {desc}" for score, desc in _RUBRIC_ANCHORS.items())
     reasoning_instruction = self._reasoning_instruction()
 
@@ -379,17 +312,6 @@ Do not include any text inside the tags other than the number."""
     trajectory_b: Trajectory,
     criterion: EvaluationCriterion,
   ) -> str:
-    """Construct a pairwise comparison prompt.
-
-    Args:
-      task: Task being evaluated.
-      trajectory_a: First trajectory (labelled "A").
-      trajectory_b: Second trajectory (labelled "B").
-      criterion: Evaluation criterion.
-
-    Returns:
-      Formatted prompt string.
-    """
     reasoning_instruction = self._reasoning_instruction()
 
     reference_block = ""
@@ -469,16 +391,7 @@ required value."""
     trajectory: Trajectory,
     **kwargs: Any,
   ) -> ScoreResult:
-    """Score a trajectory across all criteria with repeated verifications.
-
-    Args:
-      task: Task being evaluated.
-      trajectory: Trajectory to score.
-      **kwargs: Forwarded to ``score_trajectory``.
-
-    Returns:
-      Aggregated :class:`~llm_oracle.core.models.ScoreResult`.
-    """
+    """Score a trajectory across all criteria with repeated verifications."""
     criterion_scores: dict[str, list[float]] = {c.id: [] for c in self.criteria}
     all_reasoning: list[str] = []
 
@@ -518,18 +431,7 @@ required value."""
     criterion: EvaluationCriterion,
     **gen_kwargs: Any,
   ) -> tuple[float, float, str]:
-    """Run one pairwise comparison call.
-
-    Args:
-      task: Task being evaluated.
-      trajectory_a: Trajectory displayed as "A".
-      trajectory_b: Trajectory displayed as "B".
-      criterion: Criterion to compare on.
-      **gen_kwargs: Forwarded to ``model.generate``.
-
-    Returns:
-      Tuple of ``(score_a, score_b, reasoning_text)``.
-    """
+    """Run one pairwise call; returns ``(score_a, score_b, reasoning)``."""
     prompt = self._build_pairwise_prompt(task, trajectory_a, trajectory_b, criterion)
     text, _, _ = self.model.generate(prompt, **gen_kwargs)
 
@@ -548,16 +450,7 @@ required value."""
     scores: dict[str, ScoreResult],
     comparisons: list[PairwiseComparison],
   ) -> str:
-    """Select the best trajectory using pointwise scores with pairwise tie-breaking.
-
-    Args:
-      trajectories: All candidate trajectories.
-      scores: Pointwise ``ScoreResult`` per trajectory ID.
-      comparisons: All pairwise comparisons performed.
-
-    Returns:
-      ID of the best trajectory.
-    """
+    """Return the best trajectory ID using 70% pointwise + 30% pairwise win-rate."""
     if not trajectories:
       raise ValueError("Trajectory list is empty")
 
@@ -579,15 +472,7 @@ required value."""
     trajectories: TrajectoryList,
     comparisons: list[PairwiseComparison],
   ) -> dict[str, float]:
-    """Compute win rate for each trajectory from pairwise comparisons.
-
-    Args:
-      trajectories: All candidate trajectories.
-      comparisons: Pairwise comparison results.
-
-    Returns:
-      Dictionary mapping trajectory ID to win rate in [0, 1].
-    """
+    """Return per-trajectory win rate in [0, 1] from pairwise comparisons."""
     wins: dict[str, float] = {t.id: 0.0 for t in trajectories}
     totals: dict[str, int] = {t.id: 0 for t in trajectories}
 
@@ -612,15 +497,7 @@ required value."""
   # ------------------------------------------------------------------ #
 
   def _parse_pointwise_score(self, text: str) -> float:
-    """Parse a pointwise score from model output.
-
-    Args:
-      text: Raw model output.
-
-    Returns:
-      Parsed score clamped to ``[score_min, score_max]``, or the midpoint
-      when no valid score is found.
-    """
+    """Parse a pointwise score from model output, clamped to ``[score_min, score_max]``."""
     return self._parse_tagged_float(text, _SCORE_PATTERN)
 
   def _parse_tagged_float(
@@ -628,15 +505,7 @@ required value."""
     text: str,
     pattern: re.Pattern,
   ) -> float:
-    """Extract a float from text using a compiled regex pattern.
-
-    Args:
-      text: Text to search.
-      pattern: Compiled regex with one capturing group for the numeric value.
-
-    Returns:
-      Clamped float or the scale midpoint on parse failure.
-    """
+    """Extract a clamped float from text via regex; returns midpoint on failure."""
     match = pattern.search(text or "")
     if match:
       try:
@@ -653,31 +522,14 @@ required value."""
   # ------------------------------------------------------------------ #
 
   def _normalize(self, raw: float) -> float:
-    """Normalize a raw score from ``[score_min, score_max]`` to ``[0, 1]``.
-
-    Args:
-      raw: Raw score value.
-
-    Returns:
-      Normalized score.
-    """
+    """Normalize a raw score from ``[score_min, score_max]`` to ``[0, 1]``."""
     span = self.score_max - self.score_min
     if span == 0:
       return 0.5
     return max(0.0, min(1.0, (raw - self.score_min) / span))
 
   def _score_to_confidence(self, raw: float) -> float:
-    """Map a raw score to a confidence value.
-
-    Extreme scores (very high or very low) are considered more reliable
-    than borderline mid-range scores.
-
-    Args:
-      raw: Raw score value.
-
-    Returns:
-      Confidence in ``[0.5, 1.0]``.
-    """
+    """Map a raw score to confidence; extreme scores are more reliable than mid-range."""
     normalized = self._normalize(raw)
     # Distance from 0.5 (center) → higher distance = more confident
     distance = abs(normalized - 0.5)
@@ -687,14 +539,7 @@ required value."""
     self,
     criterion_scores: dict[str, float],
   ) -> float:
-    """Estimate confidence from agreement across criteria.
-
-    Args:
-      criterion_scores: Per-criterion normalized scores.
-
-    Returns:
-      Confidence value in ``[0.5, 1.0]``.
-    """
+    """Estimate confidence from criterion agreement (low stdev = high confidence)."""
     if not criterion_scores:
       return 0.5
     scores = list(criterion_scores.values())
@@ -714,17 +559,7 @@ required value."""
     return max(0.5, confidence)
 
   def _pairwise_confidence(self, score_a: float, score_b: float) -> float:
-    """Compute confidence in a pairwise comparison.
-
-    Larger margin between scores → higher confidence.
-
-    Args:
-      score_a: Raw score for trajectory A.
-      score_b: Raw score for trajectory B.
-
-    Returns:
-      Confidence in ``[0.5, 1.0]``.
-    """
+    """Compute confidence from pairwise margin; larger gap = higher confidence."""
     span = self.score_max - self.score_min
     if span == 0:
       return 0.5

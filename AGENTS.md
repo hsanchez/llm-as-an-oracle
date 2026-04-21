@@ -66,6 +66,17 @@ All must pass — enforced by CI.
 - Prioritize clarity over cleverness
 - Follow existing patterns; maintain consistency across the codebase
 
+## Docstring Standards
+
+Follow lightweight Google style — type annotations already document types, so docstrings should only add what the signature cannot express.
+
+- **Module**: one or two sentences max; purpose only, no RST/NumPy section headers.
+- **Class**: one-line summary. Add a short paragraph only when behavior is non-obvious from the name and type annotations.
+- **Dataclass `Attributes:`**: never — field names and type annotations are self-documenting.
+- **Method `Args:`**: omit when parameters are obvious from names and types. Add only when behavior differs from what the signature implies (e.g., a flag that is silently ignored, a surprising default).
+- **Method `Returns:`**: include only for non-obvious return shapes (tuples, composite objects). Skip when the return type annotation is sufficient.
+- **`Raises:`**: always include — callers need it.
+
 ## Module & Package Standards
 
 - Prefer implementing functionality in existing files unless it is a genuinely new logical component

@@ -1,28 +1,7 @@
-"""Evaluation harness for comparing LLM-as-a-Verifier vs LLM-as-a-Judge.
+"""Side-by-side comparison harness for Verifier vs Judge, with composite hardness metrics.
 
-This module provides a rigorous, side-by-side comparison framework for the two
-evaluation strategies.  It measures not just raw accuracy but also *evaluation
-hardness* — a composite metric that quantifies how difficult a task is to
-evaluate correctly, and whether one strategy handles hard tasks better than the
-other.
-
-Hardness Dimensions
--------------------
-* **Score spread**         – high inter-strategy score spread per trajectory
-                             signals that the two evaluators disagree on absolute
-                             scores, marking the task as evaluation-hard.
-* **Strategy disagreement** – when verifier and judge disagree on ranking,
-                             the task is inherently harder to evaluate.
-* **Confidence gap**       – low aggregate confidence from both strategies
-                             marks a task as evaluation-hard.
-* **Oracle gap**           – distance between the selected-best and oracle-best
-                             trajectories; directly measures selection error.
-
-Typical Usage
--------------
->>> harness = EvaluationHarness(verifier, judge)
->>> report  = harness.run(tasks_with_trajectories)
->>> print(report.summary())
+Hardness is measured across four dimensions: score spread, strategy disagreement,
+confidence gap, and oracle gap (selection error).
 """
 
 from __future__ import annotations
@@ -49,25 +28,7 @@ from llm_oracle.core.strategy import BaseStrategy
 
 @dataclass
 class TaskHardnessRecord:
-  """Hardness measurements for a single task.
-
-  Attributes:
-    task_id:               Task identifier.
-    hardness_score:        Composite hardness in [0, 1] (higher = harder).
-    score_spread:        Mean absolute score difference between verifier and
-                           judge per trajectory (inter-strategy spread).
-    strategy_disagreement: Fraction of trajectory pairs on which the two
-                           strategies disagree on the better one (0–1).
-    avg_confidence:        Mean confidence reported by both strategies (0–1).
-                           Low confidence indicates a hard evaluation.
-    oracle_gap_verifier:   Reward difference between oracle-best and
-                           verifier-selected trajectories (0–1).
-    oracle_gap_judge:      Same gap for the judge strategy.
-    verifier_result:       Full evaluation result from the verifier.
-    judge_result:          Full evaluation result from the judge.
-    elapsed_verifier_s:    Wall-clock seconds for the verifier run.
-    elapsed_judge_s:       Wall-clock seconds for the judge run.
-  """
+  """Hardness measurements and evaluation results for a single task."""
 
   task_id: str
   hardness_score: float = 0.0
@@ -108,18 +69,7 @@ class TaskHardnessRecord:
 
 @dataclass
 class HarnessReport:
-  """Aggregated comparison report for all evaluated tasks.
-
-  Attributes:
-    task_records:         One :class:`TaskHardnessRecord` per task.
-    verifier_accuracy:    Fraction of tasks where the verifier selected the
-                          oracle-best trajectory (0–1).
-    judge_accuracy:       Same for the judge strategy (0–1).
-    avg_hardness:         Mean composite hardness across all tasks.
-    hard_task_threshold:  Hardness value above which a task is considered
-                          "hard" (default 0.6).
-    total_elapsed_s:      Total wall-clock seconds for the full harness run.
-  """
+  """Aggregated comparison report for all evaluated tasks."""
 
   task_records: list[TaskHardnessRecord] = field(default_factory=list)
   verifier_accuracy: float = 0.0
@@ -273,19 +223,7 @@ class HarnessReport:
 
 @dataclass
 class EvaluationHarness:
-  """Runs both evaluation strategies and computes hardness metrics.
-
-  The harness accepts a verifier strategy and a judge strategy, then runs them
-  in parallel (per task) over a collection of ``(Task, trajectories)`` pairs.
-  Results are aggregated into a :class:`HarnessReport`.
-
-  Attributes:
-    verifier:             A strategy implementing the verifier approach.
-    judge:                A strategy implementing the judge approach.
-    max_workers:          Maximum parallel workers for cross-task evaluation.
-    hard_task_threshold:  Composite hardness threshold (default 0.6).
-    hardness_weights:     Weights for the four hardness dimensions.
-  """
+  """Runs both strategies in parallel and aggregates results into a HarnessReport."""
 
   verifier: BaseStrategy
   judge: BaseStrategy
@@ -317,16 +255,7 @@ class EvaluationHarness:
     *,
     parallel: bool = True,
   ) -> HarnessReport:
-    """Run the full harness over all tasks.
-
-    Args:
-      task_trajectories: Sequence of ``(task, trajectories)`` pairs.  Each
-                         trajectory list must contain at least one entry.
-      parallel:          When ``True``, tasks are evaluated concurrently using
-                         a thread pool.
-
-    Returns:
-      Aggregated :class:`HarnessReport`.
+    """Run the full harness; uses a thread pool when ``parallel=True``.
 
     Raises:
       ValueError: If any trajectory list is empty.
@@ -351,13 +280,6 @@ class EvaluationHarness:
   ) -> TaskHardnessRecord:
     """Evaluate a single task with both strategies.
 
-    Args:
-      task:          The task to evaluate.
-      trajectories:  Candidate trajectories (must be non-empty).
-
-    Returns:
-      :class:`TaskHardnessRecord` with hardness metrics.
-
     Raises:
       ValueError: If ``trajectories`` is empty.
     """
@@ -378,19 +300,7 @@ class EvaluationHarness:
     verifier_result: EvaluationResult,
     judge_result: EvaluationResult,
   ) -> float:
-    """Compute the composite hardness score for one task.
-
-    This is useful when results are pre-computed (e.g., loaded from cache).
-
-    Args:
-      task:             Task being evaluated.
-      trajectories:     Candidate trajectories used in evaluation.
-      verifier_result:  Pre-computed verifier evaluation result.
-      judge_result:     Pre-computed judge evaluation result.
-
-    Returns:
-      Composite hardness in [0, 1].
-    """
+    """Compute composite hardness in [0, 1] from pre-computed strategy results."""
     record = self._compute_record(task, trajectories, verifier_result, judge_result)
     return record.hardness_score
 
@@ -427,19 +337,6 @@ class EvaluationHarness:
     elapsed_v: float = 0.0,
     elapsed_j: float = 0.0,
   ) -> TaskHardnessRecord:
-    """Build a :class:`TaskHardnessRecord` from two strategy results.
-
-    Args:
-      task:             Task that was evaluated.
-      trajectories:     Candidate trajectories.
-      verifier_result:  Result from the verifier strategy.
-      judge_result:     Result from the judge strategy.
-      elapsed_v:        Wall-clock seconds for the verifier run.
-      elapsed_j:        Wall-clock seconds for the judge run.
-
-    Returns:
-      Populated :class:`TaskHardnessRecord`.
-    """
     oracle_id = _oracle_best(trajectories)
 
     score_var = _inter_strategy_score_spread(verifier_result, judge_result)
@@ -483,15 +380,6 @@ class EvaluationHarness:
     records: list[TaskHardnessRecord],
     total_elapsed: float,
   ) -> HarnessReport:
-    """Aggregate per-task records into a :class:`HarnessReport`.
-
-    Args:
-      records:       Per-task hardness records.
-      total_elapsed: Total wall-clock seconds.
-
-    Returns:
-      Fully populated :class:`HarnessReport`.
-    """
     if not records:
       return HarnessReport(
         hard_task_threshold=self.hard_task_threshold,
@@ -525,16 +413,7 @@ def _timed(fn, *args, **kwargs) -> tuple:
 
 
 def _oracle_best(trajectories: TrajectoryList) -> str | None:
-  """Return the ID of the trajectory with the highest ground-truth reward.
-
-  When no trajectory carries a reward, returns ``None``.
-
-  Args:
-    trajectories: Candidate trajectories.
-
-  Returns:
-    ID of the oracle-best trajectory, or ``None``.
-  """
+  """Return the highest-reward trajectory ID, or ``None`` when no reward is set."""
   rewarded = [t for t in trajectories if t.reward is not None]
   if not rewarded:
     return None
@@ -546,19 +425,9 @@ def _oracle_gap(
   result: EvaluationResult,
   trajectories: TrajectoryList,
 ) -> float:
-  """Compute the normalized reward gap between oracle-best and selected-best.
+  """Return the reward gap between oracle-best and selected-best in [0, 1].
 
-  Uses reward space when ground-truth rewards exist (strategy scores alone
-  collapse the gap to zero for self-consistent strategies).  Falls back to
-  comparing strategy scores when no oracle is available.
-
-  Args:
-    oracle_id:    Ground-truth best trajectory ID (may be ``None``).
-    result:       Evaluation result containing trajectory scores.
-    trajectories: Candidate trajectories (used to look up reward values).
-
-  Returns:
-    Gap in [0, 1]; 0.0 means perfect selection.
+  Uses ground-truth reward when available; falls back to strategy scores.
   """
   scores = result.trajectory_scores
   if not scores:
@@ -582,19 +451,7 @@ def _inter_strategy_score_spread(
   verifier_result: EvaluationResult,
   judge_result: EvaluationResult,
 ) -> float:
-  """Compute mean absolute score difference between strategies per trajectory.
-
-  High spread signals an evaluation-hard task (strategies disagree on absolute
-  quality, not just ranking — see :func:`_pairwise_disagreement` for the
-  ranking-only variant).
-
-  Args:
-    verifier_result: Verifier evaluation result.
-    judge_result:    Judge evaluation result.
-
-  Returns:
-    Mean absolute score difference in [0, 1]; higher = harder to evaluate.
-  """
+  """Mean absolute score difference between strategies per trajectory (absolute quality spread)."""
   v_scores = verifier_result.trajectory_scores
   j_scores = judge_result.trajectory_scores
   shared = [tid for tid in v_scores if tid in j_scores]
@@ -609,19 +466,7 @@ def _pairwise_disagreement(
   verifier_result: EvaluationResult,
   judge_result: EvaluationResult,
 ) -> float:
-  """Fraction of trajectory pairs on which the two strategies disagree.
-
-  Two strategies disagree on a pair ``(i, j)`` when they rank them in
-  opposite order.
-
-  Args:
-    trajectories:     All candidate trajectories.
-    verifier_result:  Verifier evaluation result.
-    judge_result:     Judge evaluation result.
-
-  Returns:
-    Disagreement fraction in [0, 1].
-  """
+  """Fraction of trajectory pairs where strategies disagree on ranking."""
   v_scores = verifier_result.trajectory_scores
   j_scores = judge_result.trajectory_scores
 
@@ -653,15 +498,7 @@ def _avg_confidence(
   verifier_result: EvaluationResult,
   judge_result: EvaluationResult,
 ) -> float:
-  """Compute the mean confidence across all trajectory scores in both results.
-
-  Args:
-    verifier_result: Verifier evaluation result.
-    judge_result:    Judge evaluation result.
-
-  Returns:
-    Mean confidence in [0, 1].
-  """
+  """Mean confidence across all trajectory scores in both strategy results."""
   all_confidences: list[float] = []
   for result in (verifier_result, judge_result):
     for score_result in result.trajectory_scores.values():
@@ -675,19 +512,7 @@ def _accuracy_on(
   records: Sequence[TaskHardnessRecord],
   strategy: StrategyType,
 ) -> float:
-  """Compute selection accuracy for a strategy over a set of records.
-
-  A task is counted as correctly solved when the strategy's oracle gap is 0
-  (it selected the ground-truth best trajectory) *or* when no ground-truth
-  is available and it selected the highest-scored one.
-
-  Args:
-    records:  Per-task hardness records.
-    strategy: Which strategy to measure.
-
-  Returns:
-    Accuracy in [0, 1].
-  """
+  """Selection accuracy for a strategy: fraction of tasks with near-zero oracle gap."""
   if not records:
     return 0.0
 
@@ -707,9 +532,6 @@ def _accuracy_on(
 
 def _validate_hardness_weights(weights: dict[str, float]) -> None:
   """Validate that hardness weights are non-negative and sum to 1.
-
-  Args:
-    weights: Weight dictionary to validate.
 
   Raises:
     ValueError: If weights are invalid.
@@ -749,19 +571,7 @@ def _row(
   wins_v: int = 0,
   wins_j: int = 0,
 ) -> str:
-  """Format one row of the summary table.
-
-  Args:
-    label:  Row label (left column).
-    val_v:  Value for the verifier column.
-    val_j:  Value for the judge column.
-    fmt:    One of ``"pct"`` (percentage), ``"time"`` (seconds), or ``"count"``.
-    wins_v: Used only when ``fmt="count"``; raw win count for the verifier.
-    wins_j: Used only when ``fmt="count"``; raw win count for the judge.
-
-  Returns:
-    Formatted table row string.
-  """
+  """Format one row of the summary table; fmt is one of ``"pct"``, ``"time"``, ``"count"``."""
   if fmt == "pct":
     v_str = f"{val_v:.1%}"
     j_str = f"{val_j:.1%}"

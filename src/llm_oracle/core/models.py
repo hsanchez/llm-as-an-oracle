@@ -1,8 +1,4 @@
-"""Core data models and types for LLM Oracle system.
-
-This module defines the fundamental data structures used throughout the system,
-including tasks, trajectories, evaluations, and scoring results.
-"""
+"""Core data models and types for the LLM Oracle system."""
 
 from __future__ import annotations
 
@@ -30,17 +26,7 @@ class StrategyType(enum.Enum):
 
 @dataclass(frozen=True)
 class Task:
-  """Represents a task to be evaluated.
-
-  Attributes:
-    id: Unique task identifier
-    description: Natural language description of the task
-    problem_statement: Formal problem statement
-    test_cases: Optional test cases for verification
-    ground_truth: Optional ground truth solution or output
-    metadata: Additional task metadata
-    difficulty: Estimated task difficulty
-  """
+  """Immutable task descriptor."""
 
   id: str
   description: str
@@ -53,16 +39,7 @@ class Task:
 
 @dataclass
 class Trajectory:
-  """Represents an execution trajectory or solution attempt.
-
-  Attributes:
-    id: Unique trajectory identifier
-    task_id: Associated task ID
-    content: The actual trajectory content (code, actions, reasoning)
-    output: Execution output or result
-    metadata: Additional trajectory metadata
-    reward: Optional reward/success indicator (0.0-1.0)
-  """
+  """Execution trajectory or solution attempt."""
 
   id: str
   task_id: str
@@ -74,14 +51,7 @@ class Trajectory:
 
 @dataclass
 class EvaluationCriterion:
-  """A single evaluation criterion.
-
-  Attributes:
-    id: Unique criterion identifier
-    name: Human-readable criterion name
-    description: Detailed description of what to evaluate
-    weight: Relative weight in overall evaluation (0.0-1.0)
-  """
+  """A single evaluation criterion with a scoring weight."""
 
   id: str
   name: str
@@ -91,17 +61,7 @@ class EvaluationCriterion:
 
 @dataclass
 class ScoreResult:
-  """Result of scoring a single trajectory.
-
-  Attributes:
-    trajectory_id: ID of the scored trajectory
-    score: Normalized score (0.0-1.0)
-    raw_score: Raw score before normalization
-    confidence: Confidence in the score (0.0-1.0)
-    criterion_scores: Scores per criterion
-    reasoning: Textual explanation of the score
-    metadata: Additional scoring metadata
-  """
+  """Scoring result for one trajectory."""
 
   trajectory_id: str
   score: float
@@ -114,18 +74,7 @@ class ScoreResult:
 
 @dataclass
 class PairwiseComparison:
-  """Result of comparing two trajectories.
-
-  Attributes:
-    trajectory_a_id: ID of first trajectory
-    trajectory_b_id: ID of second trajectory
-    score_a: Score for trajectory A
-    score_b: Score for trajectory B
-    winner: ID of winning trajectory (or None for tie)
-    criterion_id: Criterion used for comparison
-    confidence: Confidence in the comparison
-    reasoning: Textual explanation
-  """
+  """Pairwise comparison result for two trajectories."""
 
   trajectory_a_id: str
   trajectory_b_id: str
@@ -139,16 +88,7 @@ class PairwiseComparison:
 
 @dataclass
 class EvaluationResult:
-  """Complete evaluation result for a set of trajectories.
-
-  Attributes:
-    task_id: ID of the evaluated task
-    strategy_type: Strategy used for evaluation
-    best_trajectory_id: ID of the best trajectory
-    trajectory_scores: Scores for all trajectories
-    pairwise_comparisons: All pairwise comparisons performed
-    metadata: Additional evaluation metadata
-  """
+  """Complete evaluation result for a set of trajectories."""
 
   task_id: str
   strategy_type: StrategyType
@@ -160,15 +100,7 @@ class EvaluationResult:
 
 @dataclass
 class RoutingDecision:
-  """Decision about which strategy to use for a task.
-
-  Attributes:
-    task_id: ID of the task
-    selected_strategy: Strategy type selected
-    confidence: Confidence in the routing decision
-    reasoning: Explanation for the decision
-    metadata: Additional routing metadata
-  """
+  """Routing decision indicating which strategy to use for a task."""
 
   task_id: str
   selected_strategy: StrategyType
@@ -179,17 +111,7 @@ class RoutingDecision:
 
 @dataclass
 class ModelConfig:
-  """Configuration for language model.
-
-  Attributes:
-    model_id: Model identifier (e.g., "gpt-4", "claude-3")
-    provider: Provider name (e.g., "openai", "anthropic")
-    api_key: API key for the provider
-    temperature: Sampling temperature
-    max_tokens: Maximum tokens in response
-    top_p: Nucleus sampling parameter
-    additional_params: Provider-specific parameters
-  """
+  """Language model configuration."""
 
   model_id: str
   provider: str
@@ -202,28 +124,12 @@ class ModelConfig:
 
 @dataclass
 class ScoringConfig:
-  """Configuration for scoring strategies.
+  """Scoring configuration shared by both strategies.
 
-  **Strategy compatibility** — not all fields apply to every strategy:
-
-  * ``use_logprobs`` — Verifier only; ignored by Judge.
-  * ``num_verifications`` — Verifier only; ignored by Judge.
-  * ``num_criteria`` — Judge only; ignored by Verifier.
-  * ``fuzzy_threshold`` — must be in ``[0.0, 1.0]`` (validated at construction).
-  * ``enable_fuzzy_alignment`` — reserved; currently has no effect.
-
-  All other fields apply to every strategy.
-
-  Attributes:
-    granularity: Number of score levels (e.g., 20 for A–T scale).
-    num_verifications: Repeated verifications per trajectory (Verifier only).
-    num_criteria: Number of evaluation criteria (Judge only).
-    enable_fuzzy_alignment: Reserved; currently unused.
-    fuzzy_threshold: Fuzzy-match threshold in ``[0.0, 1.0]``.
-    use_logprobs: Use log-probability scoring (Verifier only).
-    temperature: Sampling temperature; ``None`` defers to the strategy default.
-    max_tokens: Max response tokens; ``None`` defers to the strategy default.
-    additional_params: Strategy-specific parameters not covered by named fields.
+  Strategy-specific fields: ``use_logprobs`` and ``num_verifications`` apply
+  to the Verifier only; ``num_criteria`` applies to the Judge only.
+  ``fuzzy_threshold`` must be in ``[0.0, 1.0]``; ``enable_fuzzy_alignment``
+  is reserved and currently has no effect.
   """
 
   granularity: int = 20

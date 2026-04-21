@@ -1,38 +1,7 @@
-"""LLM provider implementations for OpenAI, Anthropic, and Gemini.
+"""Concrete LanguageModel implementations for OpenAI, Anthropic, Gemini, and a test stub.
 
-This module provides concrete ``LanguageModel`` implementations for the three
-major LLM APIs.  Each provider normalizes the vendor-specific response format
-into the common ``(text, tokens, position_logprobs)`` tuple used throughout
-the Oracle system.
-
-Provider summary
-----------------
-+-------------------+----------------------------+------------------------------+
-| Class             | Backend                    | Logprob support              |
-+-------------------+----------------------------+------------------------------+
-| OpenAIProvider    | openai >= 1.0              | ✓ (top_logprobs)             |
-| AnthropicProvider | anthropic >= 0.20          | ✗ (text only)                |
-| GeminiProvider    | google-genai >= 0.8        | ✓ (response_logprobs)        |
-| StubProvider      | in-process (no API call)   | ✓ (synthetic)                |
-+-------------------+----------------------------+------------------------------+
-
-All providers are *lazy-import*: the vendor SDK is imported only when the
-provider is instantiated, so missing optional dependencies do not break imports
-of this module.
-
-Environment variables
----------------------
-OPENAI_API_KEY        – OpenAI secret key
-ANTHROPIC_API_KEY     – Anthropic secret key
-GEMINI_API_KEY        – Google AI Studio key
-VERTEX_API_KEY        – Vertex AI key (alternative for Gemini)
-
-Typical usage
--------------
->>> from llm_oracle.core.providers import OpenAIProvider, ModelConfig
->>> config = ModelConfig(model_id="gpt-4o", provider="openai")
->>> model  = OpenAIProvider.from_config(config)
->>> text, tokens, logprobs = model.generate("Hello!", return_logprobs=True)
+All providers normalize vendor responses into ``(text, tokens, position_logprobs)``
+and use lazy SDK imports so missing optional dependencies don't break module import.
 """
 
 from __future__ import annotations
@@ -57,11 +26,10 @@ PositionLogprobs = list[list[tuple[str, float]]]  # [(token_str, log_prob)]
 
 
 class BaseProvider(ABC):
-  """Abstract base class that all provider implementations extend.
+  """Abstract base for all provider implementations.
 
-  Subclasses must implement :meth:`generate`.  The method signature is
-  intentionally identical to the ``LanguageModel`` protocol so that providers
-  are structural subtypes without needing explicit ``Protocol`` inheritance.
+  Subclasses must implement ``generate`` with the same signature as the
+  ``LanguageModel`` protocol — providers are structural subtypes.
   """
 
   def __init__(self, model_id: str, **kwargs: Any) -> None:
@@ -81,35 +49,16 @@ class BaseProvider(ABC):
   ) -> tuple[str, list[str] | None, PositionLogprobs | None]:
     """Generate a completion for *prompt*.
 
-    Args:
-      prompt:          Input text.
-      temperature:     Sampling temperature (0 = greedy).
-      max_tokens:      Maximum output tokens.
-      return_logprobs: Whether to populate the logprobs return values.
-      **kwargs:        Provider-specific overrides.
-
     Returns:
-      3-tuple ``(text, tokens, position_logprobs)`` where:
-        - ``text``             – raw completion string.
-        - ``tokens``           – list of token strings in generation order,
-                                 or ``None`` when unavailable.
-        - ``position_logprobs``– per-position list of ``(token, log_prob)``
-                                 candidates, or ``None`` when unavailable.
+      ``(text, tokens, position_logprobs)`` — logprob fields are ``None``
+      when ``return_logprobs=False`` or the provider doesn't support them.
     """
 
   # ── Factory helper ───────────────────────────────────────────────────────────
 
   @classmethod
   def from_config(cls, config: ModelConfig) -> BaseProvider:
-    """Instantiate a provider from a :class:`~llm_oracle.core.models.ModelConfig`.
-
-    Args:
-      config: Model configuration with ``model_id``, optional ``api_key``, and
-              ``additional_params``.
-
-    Returns:
-      A fully initialized provider instance.
-    """
+    """Instantiate a provider from a ModelConfig."""
     kwargs: dict[str, Any] = dict(config.additional_params)
     if config.api_key:
       kwargs["api_key"] = config.api_key
@@ -127,18 +76,8 @@ class BaseProvider(ABC):
 class OpenAIProvider(BaseProvider):
   """OpenAI chat completion provider (openai >= 1.0).
 
-  Supports:
-    - All ``gpt-*`` and ``o*`` model families.
-    - ``top_logprobs`` extraction when ``return_logprobs=True``.
-    - Azure OpenAI via ``base_url`` + ``api_version`` kwargs.
-
-  Args:
-    model_id:      Model identifier (e.g. ``"gpt-4o"``).
-    api_key:       Override for ``OPENAI_API_KEY`` env var.
-    base_url:      Optional custom base URL (Azure, proxy, etc.).
-    api_version:   Optional API version string (Azure).
-    top_logprobs:  Number of top logprob candidates per token (1–20).
-    **kwargs:      Additional keyword args forwarded to ``openai.OpenAI``.
+  Supports gpt-* and o* model families, top_logprobs extraction, and
+  Azure OpenAI via ``base_url`` + ``api_version`` kwargs.
   """
 
   def __init__(
@@ -178,20 +117,7 @@ class OpenAIProvider(BaseProvider):
     return_logprobs: bool = False,
     **kwargs: Any,
   ) -> tuple[str, list[str] | None, PositionLogprobs | None]:
-    """Call the OpenAI chat completions API.
-
-    Args:
-      prompt:          User-turn content.
-      temperature:     Sampling temperature.
-      max_tokens:      Maximum completion tokens.
-      return_logprobs: When ``True``, populate ``tokens`` and
-                       ``position_logprobs`` from the API response.
-      **kwargs:        Forwarded to ``client.chat.completions.create``.
-
-    Returns:
-      ``(text, tokens, position_logprobs)`` — logprob fields are ``None``
-      when ``return_logprobs=False`` or the API does not return them.
-    """
+    """Call the OpenAI chat completions API."""
     request: dict[str, Any] = {
       "model": self.model_id,
       "messages": [{"role": "user", "content": prompt}],
@@ -232,17 +158,9 @@ class OpenAIProvider(BaseProvider):
 class AnthropicProvider(BaseProvider):
   """Anthropic Messages API provider (anthropic >= 0.20).
 
-  Anthropic does **not** expose token-level log probabilities, so
-  ``position_logprobs`` is always ``None``.  The verifier strategy
-  gracefully falls back to text-based score extraction in this case.
-
-  Args:
-    model_id:    Model identifier (e.g. ``"claude-opus-4-5"``).
-    api_key:     Override for ``ANTHROPIC_API_KEY`` env var.
-    system:      Optional system prompt prepended to every request.
-    thinking:    Enable extended thinking (Claude 3.7+).
-    budget_tokens: Token budget for extended thinking.
-    **kwargs:    Additional kwargs forwarded to the Anthropic client.
+  Anthropic does not expose token-level log probabilities, so
+  ``position_logprobs`` is always ``None``; the verifier falls back to
+  text-based score extraction.
   """
 
   def __init__(
@@ -277,18 +195,7 @@ class AnthropicProvider(BaseProvider):
     return_logprobs: bool = False,
     **kwargs: Any,
   ) -> tuple[str, list[str] | None, PositionLogprobs | None]:
-    """Call the Anthropic Messages API.
-
-    Args:
-      prompt:          User message content.
-      temperature:     Sampling temperature.
-      max_tokens:      Maximum completion tokens.
-      return_logprobs: Ignored — Anthropic does not expose logprobs.
-      **kwargs:        Forwarded to ``client.messages.create``.
-
-    Returns:
-      ``(text, None, None)`` — logprob fields are always ``None``.
-    """
+    """Call the Anthropic Messages API; always returns ``(text, None, None)``."""
     request: dict[str, Any] = {
       "model": self.model_id,
       "max_tokens": max_tokens,
@@ -326,19 +233,10 @@ class AnthropicProvider(BaseProvider):
 
 
 class GeminiProvider(BaseProvider):
-  """Google Gemini provider via the ``google-genai`` SDK (>= 0.8).
+  """Google Gemini provider via the google-genai SDK (>= 0.8).
 
-  Supports logprob extraction when ``return_logprobs=True``.  Uses Vertex AI
-  when ``vertexai=True`` or when ``VERTEX_API_KEY`` is set; otherwise uses the
-  Google AI Studio key from ``GEMINI_API_KEY``.
-
-  Args:
-    model_id:      Model identifier (e.g. ``"gemini-2.5-flash"``).
-    api_key:       Override for ``GEMINI_API_KEY`` / ``VERTEX_API_KEY``.
-    vertexai:      Force Vertex AI backend.
-    top_logprobs:  Number of top logprob candidates (1–20).
-    thinking_budget: Token budget for thinking (0 = disabled).
-    **kwargs:      Additional kwargs forwarded to ``GenerateContentConfig``.
+  Uses Vertex AI when ``vertexai=True`` or ``VERTEX_API_KEY`` is set;
+  otherwise uses ``GEMINI_API_KEY``. Supports logprob extraction.
   """
 
   def __init__(
@@ -386,19 +284,7 @@ class GeminiProvider(BaseProvider):
     return_logprobs: bool = False,
     **kwargs: Any,
   ) -> tuple[str, list[str] | None, PositionLogprobs | None]:
-    """Call the Gemini generate content API.
-
-    Args:
-      prompt:          User prompt text.
-      temperature:     Sampling temperature.
-      max_tokens:      Maximum output tokens.
-      return_logprobs: When ``True``, extract ``response_logprobs``.
-      **kwargs:        Forwarded to ``GenerateContentConfig``.
-
-    Returns:
-      ``(text, tokens, position_logprobs)`` — logprob fields populated when
-      ``return_logprobs=True`` and the model supports it.
-    """
+    """Call the Gemini generate content API."""
     from google.genai.types import (  # type: ignore[import-untyped]  # noqa: PLC0415
       Content,
       GenerateContentConfig,
@@ -455,25 +341,10 @@ class GeminiProvider(BaseProvider):
 class StubResponse:
   """Pre-programmed response for the stub provider.
 
-  The provider detects the evaluation mode from the prompt at call time
-  (presence of ``<score_A>`` / ``<score_B>`` tags) and uses the matching
-  fields:
-
-  * **Single-trajectory** — ``score`` is used; ``score_a`` / ``score_b`` ignored.
-  * **Pairwise** — ``score_a`` and ``score_b`` are used; ``score`` ignored.
-
-  All three fields may be set on the same instance so a single response
-  works regardless of which mode the provider encounters::
-
-      StubResponse(score="G", score_a="G", score_b="E")
-
-  Unset fields fall back to the provider-level defaults.
-
-  Attributes:
-    text:    Text to return verbatim; generated if omitted.
-    score:   Score for single-trajectory prompts.
-    score_a: Score for trajectory A in pairwise prompts.
-    score_b: Score for trajectory B in pairwise prompts.
+  Mode is detected from the prompt: ``<score_A>``/``<score_B>`` tags → pairwise
+  (uses ``score_a``/``score_b``); otherwise pointwise (uses ``score``).
+  All three fields can be set so one instance works in either mode.
+  Unset fields fall back to provider-level defaults.
   """
 
   text: str = ""
@@ -483,20 +354,7 @@ class StubResponse:
 
 
 class StubProvider(BaseProvider):
-  """In-process stub provider for unit tests and offline development.
-
-  Returns deterministic or programmed responses without any network call.
-  Optionally synthesises log-probability distributions for score tokens.
-
-  Args:
-    model_id:        Arbitrary model identifier string.
-    default_score:   Default score letter/digit for single-trajectory prompts.
-    default_score_a: Default score for trajectory A in pairwise prompts.
-    default_score_b: Default score for trajectory B in pairwise prompts.
-    responses:       Optional list of :class:`StubResponse` objects consumed
-                     in round-robin order.
-    seed:            Random seed for reproducible synthetic logprob generation.
-  """
+  """In-process stub for unit tests and offline use; no network calls."""
 
   def __init__(
     self,
@@ -524,18 +382,7 @@ class StubProvider(BaseProvider):
     return_logprobs: bool = False,
     **kwargs: Any,
   ) -> tuple[str, list[str] | None, PositionLogprobs | None]:
-    """Return a pre-programmed or synthesised response.
-
-    Args:
-      prompt:          Input prompt (inspected to detect pairwise vs pointwise).
-      temperature:     Unused by the stub.
-      max_tokens:      Unused by the stub.
-      return_logprobs: When ``True``, generate synthetic logprob distributions.
-      **kwargs:        Unused.
-
-    Returns:
-      ``(text, tokens, position_logprobs)`` suitable for score extraction.
-    """
+    """Return a pre-programmed or synthesized response."""
     # Pick response template
     if self._responses:
       stub = self._responses[self._call_count % len(self._responses)]
@@ -584,21 +431,7 @@ class StubProvider(BaseProvider):
     score_b: str,
     is_pairwise: bool,
   ) -> tuple[list[str], PositionLogprobs]:
-    """Generate synthetic token + logprob arrays for the response.
-
-    The synthetic distribution puts ~70 % probability on the target score token
-    and spreads the remaining 30 % across adjacent tokens.
-
-    Args:
-      text:        Full response text.
-      score:       Target score letter for single-trajectory responses.
-      score_a:     Target score letter for trajectory A.
-      score_b:     Target score letter for trajectory B.
-      is_pairwise: Whether this is a pairwise comparison prompt.
-
-    Returns:
-      ``(tokens, position_logprobs)`` tuple.
-    """
+    """Generate synthetic token + logprob arrays (~70% mass on the target score token)."""
     # Naïve character-level tokenisation — good enough for the stub.
     raw_tokens = list(text)
     tokens: list[str] = raw_tokens
@@ -630,16 +463,7 @@ class StubProvider(BaseProvider):
     text: str,
     is_pairwise: bool,
   ) -> dict[int, str]:
-    """Map character positions that immediately follow score tags to their
-    target score letter.
-
-    Args:
-      text:        Response text.
-      is_pairwise: Whether this is a pairwise response.
-
-    Returns:
-      ``{char_index: target_letter}`` for each score token position.
-    """
+    """Return ``{char_index: target_letter}`` for each score tag position."""
     positions: dict[int, str] = {}
 
     tags = (
@@ -660,16 +484,7 @@ class StubProvider(BaseProvider):
     alphabet: list[str],
     peak: float = 0.70,
   ) -> dict[str, float]:
-    """Build a probability distribution peaked at *target*.
-
-    Args:
-      target:   Token that should receive most of the probability mass.
-      alphabet: All candidate tokens.
-      peak:     Probability assigned to the target token.
-
-    Returns:
-      ``{token: probability}`` dict summing to 1.
-    """
+    """Return a ``{token: probability}`` dict summing to 1, peaked at *target*."""
     remaining = 1.0 - peak
     others = [a for a in alphabet if a != target]
     if not others:
@@ -702,13 +517,7 @@ _PROVIDER_REGISTRY: dict[str, type] = {
 
 
 def get_provider(name: str) -> type:
-  """Look up a provider class by registry name.
-
-  Args:
-    name: Case-insensitive provider name (e.g. ``"openai"``).
-
-  Returns:
-    Provider class (not yet instantiated).
+  """Look up a provider class by registry name (case-insensitive).
 
   Raises:
     KeyError: If *name* is not registered.
@@ -721,14 +530,10 @@ def get_provider(name: str) -> type:
 
 
 def register_provider(name: str, provider_class: type) -> None:
-  """Register a custom provider class under *name*.
-
-  Args:
-    name:           Registry key (case-insensitive).
-    provider_class: Class to register; must have a ``generate`` method.
+  """Register a custom provider class under *name* (case-insensitive).
 
   Raises:
-    TypeError: If *provider_class* does not look like a valid provider.
+    TypeError: If *provider_class* does not implement ``generate``.
   """
   if not callable(getattr(provider_class, "generate", None)):
     raise TypeError(f"{provider_class!r} must implement a callable 'generate' method.")
@@ -736,18 +541,11 @@ def register_provider(name: str, provider_class: type) -> None:
 
 
 def create_provider(config: ModelConfig) -> BaseProvider:
-  """Instantiate the correct provider from a :class:`ModelConfig`.
+  """Instantiate the correct provider from a ModelConfig.
 
-  Provider resolution order:
-    1. ``config.provider`` (explicit name).
-    2. Prefix match on ``config.model_id`` (``"gpt-"`` → OpenAI, etc.).
-    3. ``StubProvider`` as final fallback.
-
-  Args:
-    config: Model configuration.
-
-  Returns:
-    An initialized :class:`BaseProvider` subclass.
+  Resolution order: explicit ``config.provider`` → model_id prefix
+  (``gpt-``/``o1``/``o3`` → OpenAI, ``claude`` → Anthropic, ``gemini`` →
+  Gemini, ``stub`` → Stub) → raises ValueError.
   """
   # Explicit provider name takes priority.
   if config.provider:

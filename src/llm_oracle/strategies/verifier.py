@@ -1,14 +1,4 @@
-"""LLM as Verifier strategy implementation.
-
-This module implements the LLM-as-a-Verifier approach, which uses fine-grained
-scoring with log probabilities, repeated verification, and criteria decomposition
-to evaluate trajectories. It achieves higher accuracy than traditional judge
-approaches by scaling scoring granularity and using pairwise tournament selection.
-
-Reference:
-  LLM-as-a-Verifier project (Notion write-up + reference implementation).
-  https://llm-as-a-verifier.notion.site/
-"""
+"""LLM-as-a-Verifier strategy: fine-grained log-probability scoring with pairwise tournament."""
 
 from __future__ import annotations
 
@@ -54,18 +44,10 @@ class VerifierStrategy(BaseStrategy):
     config: ScoringConfig,
     criteria: list[EvaluationCriterion],
   ):
-    """Initialize the verifier strategy.
-
-    Args:
-      model: Language model supporting log probability extraction
-      config: Scoring configuration with granularity and verification settings
-      criteria: List of evaluation criteria for decomposition
-    """
     super().__init__(model, config, criteria)
     self._scale_info = self.get_scale_description()
 
   def get_strategy_type(self) -> StrategyType:
-    """Return the strategy type."""
     return StrategyType.VERIFIER
 
   def evaluate(
@@ -74,18 +56,10 @@ class VerifierStrategy(BaseStrategy):
     trajectories: TrajectoryList,
     **kwargs: Any,
   ) -> EvaluationResult:
-    """Evaluate trajectories using verifier approach with tournament selection.
-
-    Args:
-      task: The task being evaluated
-      trajectories: List of candidate trajectories (n >= 1)
-      **kwargs: Additional parameters
-
-    Returns:
-      Complete evaluation result with best trajectory selected via tournament
+    """Evaluate trajectories via pairwise tournament selection.
 
     Raises:
-      ValueError: If trajectories list is empty
+      ValueError: If trajectories list is empty.
     """
     if not trajectories:
       raise ValueError("Cannot evaluate empty trajectory list")
@@ -148,17 +122,7 @@ class VerifierStrategy(BaseStrategy):
     criterion: EvaluationCriterion,
     **kwargs: Any,
   ) -> ScoreResult:
-    """Score a single trajectory against a criterion using log probabilities.
-
-    Args:
-      task: The task being evaluated
-      trajectory: The trajectory to score
-      criterion: Evaluation criterion to use
-      **kwargs: Additional parameters
-
-    Returns:
-      Score result with normalized score from log probabilities
-    """
+    """Score a trajectory against one criterion using log probabilities."""
     prompt = self._create_scoring_prompt(task, trajectory, criterion)
 
     # Generate with log probabilities
@@ -197,18 +161,7 @@ class VerifierStrategy(BaseStrategy):
     criterion: EvaluationCriterion,
     **kwargs: Any,
   ) -> PairwiseComparison:
-    """Compare two trajectories pairwise for a specific criterion.
-
-    Args:
-      task: The task being evaluated
-      trajectory_a: First trajectory
-      trajectory_b: Second trajectory
-      criterion: Criterion for comparison
-      **kwargs: Additional parameters (e.g., repetition number)
-
-    Returns:
-      Pairwise comparison with scores for both trajectories
-    """
+    """Compare two trajectories for a criterion using log probabilities."""
     prompt = self._create_pairwise_prompt(task, trajectory_a, trajectory_b, criterion)
 
     # Generate with log probabilities
@@ -254,15 +207,7 @@ class VerifierStrategy(BaseStrategy):
     task: Task,
     trajectory: Trajectory,
   ) -> ScoreResult:
-    """Score trajectory across all criteria with repeated verifications.
-
-    Args:
-      task: The task being evaluated
-      trajectory: The trajectory to score
-
-    Returns:
-      Aggregated score result across all criteria
-    """
+    """Score a trajectory across all criteria with repeated verifications."""
     criterion_scores: dict[str, list[float]] = {c.id: [] for c in self.criteria}
 
     for criterion in self.criteria:
@@ -290,16 +235,6 @@ class VerifierStrategy(BaseStrategy):
     trajectory: Trajectory,
     criterion: EvaluationCriterion,
   ) -> str:
-    """Create prompt for scoring a single trajectory.
-
-    Args:
-      task: The task being evaluated
-      trajectory: The trajectory to score
-      criterion: Evaluation criterion
-
-    Returns:
-      Formatted prompt string
-    """
     ground_truth_note = ""
     if task.ground_truth:
       ground_truth_note = (
@@ -352,17 +287,6 @@ Begin your evaluation now."""
     trajectory_b: Trajectory,
     criterion: EvaluationCriterion,
   ) -> str:
-    """Create prompt for pairwise trajectory comparison.
-
-    Args:
-      task: The task being evaluated
-      trajectory_a: First trajectory
-      trajectory_b: Second trajectory
-      criterion: Evaluation criterion
-
-    Returns:
-      Formatted prompt string
-    """
     ground_truth_note = ""
     if task.ground_truth:
       ground_truth_note = (
@@ -425,17 +349,7 @@ Begin your analysis now."""
     position_logprobs: list[list[tuple[str, float]]] | None,
     tag: str,
   ) -> tuple[float, float]:
-    """Extract score from log probabilities at the specified tag.
-
-    Args:
-      text: Generated text
-      tokens: List of generated tokens
-      position_logprobs: Log probabilities for each position
-      tag: XML-style tag to extract score from (e.g., "<score>")
-
-    Returns:
-      Tuple of (raw_score, confidence)
-    """
+    """Extract ``(raw_score, confidence)`` from logprobs at the given XML tag."""
     valid_tokens = self._scale_info["valid_tokens"]
 
     # Try to extract from log probabilities first
@@ -490,16 +404,7 @@ Begin your analysis now."""
     position_logprobs: list[list[tuple[str, float]]],
     tag: str,
   ) -> list[tuple[str, float]] | None:
-    """Find log probabilities at the position immediately after a tag.
-
-    Args:
-      tokens: List of generated tokens
-      position_logprobs: Log probabilities for each position
-      tag: Tag to search for
-
-    Returns:
-      List of (token, logprob) tuples at the tag position, or None
-    """
+    """Return logprobs at the token position immediately after *tag*, or None."""
     if not tokens or not position_logprobs:
       return None
 
@@ -518,15 +423,7 @@ Begin your analysis now."""
     trajectory_id: str,
     comparisons: list[PairwiseComparison],
   ) -> dict[str, float]:
-    """Aggregate scores for a trajectory across all comparisons.
-
-    Args:
-      trajectory_id: ID of trajectory to aggregate scores for
-      comparisons: All pairwise comparisons
-
-    Returns:
-      Dictionary mapping criterion IDs to aggregated scores
-    """
+    """Return per-criterion mean scores for a trajectory from all comparisons."""
     criterion_scores: dict[str, list[float]] = {}
 
     for comp in comparisons:
@@ -550,15 +447,7 @@ Begin your analysis now."""
     trajectories: TrajectoryList,
     comparisons: list[PairwiseComparison],
   ) -> str:
-    """Select best trajectory using round-robin tournament.
-
-    Args:
-      trajectories: List of all trajectories
-      comparisons: All pairwise comparisons
-
-    Returns:
-      ID of winning trajectory
-    """
+    """Return the ID of the trajectory with the most round-robin wins."""
     # Count wins for each trajectory
     wins: dict[str, float] = {t.id: 0.0 for t in trajectories}
 
@@ -592,14 +481,7 @@ Begin your analysis now."""
     return max(wins.keys(), key=lambda tid: wins[tid])
 
   def _compute_confidence(self, criterion_scores: dict[str, float]) -> float:
-    """Compute confidence based on score variance across criteria.
-
-    Args:
-      criterion_scores: Scores per criterion
-
-    Returns:
-      Confidence value (0.0-1.0)
-    """
+    """Compute confidence from score variance across criteria (low variance = high confidence)."""
     if not criterion_scores:
       return 0.5
 
