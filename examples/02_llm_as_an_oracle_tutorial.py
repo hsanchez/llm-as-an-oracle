@@ -35,8 +35,6 @@ from __future__ import annotations
 
 from dotenv import load_dotenv
 
-load_dotenv()  # reads .env from the repo root (or any parent directory)
-
 from llm_oracle import (
   AnthropicProvider,
   EvaluationCriterion,
@@ -49,6 +47,9 @@ from llm_oracle import (
   Trajectory,
   VerifierStrategy,
 )
+
+load_dotenv()  # reads .env from the repo root (or any parent directory)
+
 
 # %% [markdown]
 # ## 1. Provider, scoring config, and evaluation criteria
@@ -72,6 +73,7 @@ config = ScoringConfig(
   use_logprobs=False,
 )
 
+# Evaluation criteria
 criteria = [
   EvaluationCriterion(
     id="correctness",
@@ -121,10 +123,11 @@ print("Criteria:", [c.name for c in criteria])
 # edge-case test — catches the latent bug.
 
 # %%
+# bug: sorted(nums)[-k:] returns ascending order, not descending
 buggy_original = """\
 def top_k(nums: list[int], k: int) -> list[int]:
     # Returns the k largest numbers in descending order.
-    return sorted(nums)[-k:]   # bug: ascending, not descending
+    return sorted(nums)[-k:]
 """
 
 task = Task(
@@ -141,8 +144,7 @@ task = Task(
     "  4. Prefer idiomatic, readable code."
   ),
   ground_truth=(
-    "def top_k(nums: list[int], k: int) -> list[int]:\n"
-    "    return sorted(nums, reverse=True)[:k]\n"
+    "def top_k(nums: list[int], k: int) -> list[int]:\n    return sorted(nums, reverse=True)[:k]\n"
   ),
   test_cases=[
     {
@@ -242,7 +244,12 @@ print("Trajectories:", [t.id for t in trajectories])
 # %%
 verifier = VerifierStrategy(model, config, criteria)
 
-single_score = verifier.score_trajectory(task, trajectories[0], criteria[0])
+single_score = verifier.score_trajectory(
+  # bug fixing task
+  task,
+  trajectories[0],
+  criteria[0],
+)
 
 print("Verifier — single trajectory score:")
 print("  trajectory:", single_score.trajectory_id)
@@ -310,7 +317,11 @@ judge = JudgeStrategy(
   reasoning_depth="detailed",
 )
 
-single_judge = judge.score_trajectory(task, trajectories[0], criteria[0])
+single_judge = judge.score_trajectory(
+  task,  # bug fixing task
+  trajectories[0],
+  criteria[0],
+)
 
 print("Judge — single trajectory score:")
 print("  trajectory:", single_judge.trajectory_id)
