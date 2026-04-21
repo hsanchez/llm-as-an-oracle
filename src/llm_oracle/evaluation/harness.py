@@ -31,12 +31,12 @@ class TaskHardnessRecord:
   """Hardness measurements and evaluation results for a single task."""
 
   task_id: str
-  hardness_score: float = 0.0
-  score_spread: float = 0.0
-  strategy_disagreement: float = 0.0
-  avg_confidence: float = 1.0
-  oracle_gap_verifier: float = 0.0
-  oracle_gap_judge: float = 0.0
+  hardness_score: float = 0.0  # [0, 1] composite; 1 = both strategies struggled badly, 0 = both agreed with high confidence
+  score_spread: float = 0.0  # mean absolute difference (not variance) between Verifier and Judge scores per trajectory; high = they disagree on how good each candidate is
+  strategy_disagreement: float = 0.0  # fraction of (A, B) pairs where Verifier prefers A but Judge prefers B; high = strategies disagree on relative ranking
+  avg_confidence: float = 1.0  # mean confidence across all scores from both strategies; low = evaluators were uncertain about their own verdicts
+  oracle_gap_verifier: float = 0.0  # reward forfeited by following the Verifier: best_possible_reward − reward_of_verifier_pick; 0 = perfect pick
+  oracle_gap_judge: float = 0.0  # same as oracle_gap_verifier but for the Judge; compare both to see which strategy made the costlier mistake
   verifier_result: EvaluationResult | None = None
   judge_result: EvaluationResult | None = None
   elapsed_verifier_s: float = 0.0
