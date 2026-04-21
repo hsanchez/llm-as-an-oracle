@@ -33,6 +33,10 @@
 # %%
 from __future__ import annotations
 
+from dotenv import load_dotenv
+
+load_dotenv()  # reads .env from the repo root (or any parent directory)
+
 from llm_oracle import (
   AnthropicProvider,
   EvaluationCriterion,

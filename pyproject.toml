@@ -23,7 +23,9 @@ classifiers = [
   "Typing :: Typed",
 ]
 
-dependencies = []
+dependencies = [
+    "python-dotenv>=1.2.2",
+]
 
 [project.urls]
 Homepage = "https://github.com/hsanchez/llm-as-oracle"
