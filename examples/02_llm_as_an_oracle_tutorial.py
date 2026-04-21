@@ -61,7 +61,10 @@ load_dotenv()  # reads .env from the repo root (or any parent directory)
 # Set `use_logprobs=False` to use that path directly.
 
 # %%
-model = AnthropicProvider(model_id="claude-sonnet-4-6")
+model = AnthropicProvider(
+  # API KEY is read from environment variable ANTHROPIC_API_KEY
+  model_id="claude-sonnet-4-6"
+)
 
 # granularity=20 → 20-level A–T letter scale for the Verifier.
 # num_verifications=1 → one scoring pass per criterion (keep costs low).
