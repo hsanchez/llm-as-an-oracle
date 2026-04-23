@@ -1,7 +1,7 @@
 # LLM-as-an-Oracle — Agent Instructions
 
-> Shared context for Claude Code, Codex, Gemini, Cursor, and other AI coding agents.
-> Tool-specific files (CLAUDE.md, CODEX.md, .cursor/rules/) layer on top of this with overrides only.
+> Shared context for Claude Code, Codex, Gemini, and other AI coding agents.
+> Tool-specific files (CLAUDE.md, CODEX.md, GEMINI.md) layer on top of this with overrides only.
 
 ## Mission
 
