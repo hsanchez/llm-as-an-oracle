@@ -230,8 +230,8 @@ print("  traj-latent-bug:  top_k([5, 5, 3], 2) → [5, 3]  ✗  (should be [5, 5
 # ## 4. LLM-as-a-Verifier
 #
 # Verifier, Judge, and Oracle are each independently usable — this session
-# introduces them in order of increasing sophistication so you can see what
-# each adds before combining them.
+# introduces them one at a time so you can see what each adds before
+# combining them in the Oracle.
 #
 # The Verifier is the right tool here because we have concrete evidence:
 # a ground-truth reference, test cases (including the duplicate edge case),
