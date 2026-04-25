@@ -1,52 +1,69 @@
 ## The Evaluation Problem
 
-Traditional evaluation methods often rely on coarse signals such as accuracy or
-binary correctness.
+Human evaluation is the gold standard -- but it does not scale.
 
-However, modern AI systems generate complex outputs that require more nuanced
-assessment.
+- slow and expensive to run at the pace of model iteration
+- automated metrics (BLEU, ROUGE, exact match) are shallow
+- these metrics miss reasoning quality, correctness of approach, and usefulness
 
-Starting around 2024, frontier models crossed a reliability threshold, and now
-they are ``better'' at scoring at finer granularities (beyond binary, ternary,
-or 1-5 Likert scoring), making the best practice (potentially) obsolete.
+The field needed a better path.
 
-This gave rise to a new family of evaluation patterns:
+## The LLM-as-* Idiom for Response Evaluation
 
-- `LLM-as-a-Judge` -- holistic, preference-based scoring
-- `LLM-as-a-Test-Oracle` -- structured, evidence-sensitive scoring
-- **`LLM-as-a-Verifier` -- structured, evidence-sensitive scoring**
+Around 2023, frontier models crossed a reliability threshold:
+
+- their judgments on text quality and reasoning correlate with human judgments
+- they follow instructions reliably enough to apply a structured scoring *rubric* consistently
+- a model call is cheap enough to run many evaluations per task
+
+This opened the door to a new family of evaluation patterns.
+
+## The LLM-as-* Idiom for Response Evaluation, Cont'd
+
+Among them:
+
+- `LLM-as-a-Judge`: holistic, preference-based scoring
+- `LLM-as-a-Test-Oracle`, `LLM-as-a-Verifier`: structured, evidence-sensitive scoring
 - `LLM-as-a-Critic`, `LLM-as-a-Ranker`, and others
+
+**The key insight:** if a model is capable enough to produce output, it is capable
+enough to evaluate it. Now, they can do that even at finer granularities (beyond
+binary, ternary, or 1-5 Likert scoring).
 
 ## LLM-as-a-Verifier: Evaluating AI Outputs
 
 **Core Idea:** Use an LLM to verify another LLM
 
-Instead of relying on static on static metrics or human evaluation,
-this method introduces a second model whose role is to:
+Instead of relying on static metrics or human evaluation,
+a second model acts as a structured evaluator:
 
-- Analyze outouts
-- Evaluate correctness
-- Score quality across multiple independent criteria
+- Scores quality across multiple independent criteria
+- Repeats verification to reduce noise
+- Grounds scoring in evidence (test cases, references, execution output)
 
-Note: Previous reincarnations of `LLM-as-a-Verifier` didn't work well 1-2 yrs ago.
+This works well now — previous attempts failed because models lacked
+sufficient instruction-following at fine scoring granularities.
 
 ## Key Contribution: Continuous Reward from Log Probabilities
 
 One of its key contribution lies in how scores are computed.
 
 Rather than selecting a single token to represent a score, it leverages the
-entire log probability distribution over possible scoring tokens.
+entire *log probability distribution* over possible scoring tokens.
+
+Log probabilities are the model's raw confidence over each possible output token
+(($-\infty$, 0], where 0 means certainty), and the *reward* is their weighted sum.
+
+## Key Contribution: Continuous Reward from Log Probabilities, Cont'd
 
 This transforms evaluation from a discrete decision (correct or incorrect)
 into a **continuous reward signal**. I.e.,
 
-```
-Reward = (1 / CK) ∑_{c=1}^{C} ∑_{k=1}^{K} ∑_{g=1}^{G} (score_logprob \times score_value)
-```
+$$Reward = (1 / CK) \Sigma_{c=1}^{C} \Sigma_{k=1}^{K} \Sigma_{g=1}^{G} (score_logprob \times score_value)$$
 
-Where *C* is the total number of evaluation criteria, K is the number of repeated
-verifications, and G is the scoring granularity (i.e., the number of unique
-scoring output options).
+Where $C$ is the total number of evaluation criteria, $K$ is the number of
+repeated verifications, and $G$ is the scoring granularity (i.e., the number of
+unique scoring output options).
 
 ## Practical Example: Scoring with Log Probabilities
 
@@ -58,38 +75,74 @@ probs = np.array([0.05, 0.1, 0.2, 0.4, 0.25])
 scores = np.array([1, 2, 3, 4, 5])
 # Expected score (continuous reward)
 reward = np.sum(probs * scores)
-print("Reward:", expected_score) # 3.7
+print("Reward:", reward)  # => 3.7
 ```
 
-Instead of selecting the most likely score (i.e., 0.4), it computes
+Instead of selecting the most likely score (i.e., 4), it computes
 a weighted expectation, resulting in a more informative evaluation.
 
 ## Why LLM-as-a-Verifier Matters
+
+It matters because:
 
 - Accurate evaluation (Captures nuance beyond binary correctness)
 - Better optimization signals (Smoother reward functions)
 - Reduces reliance on manual evaluation
 
-## Verification does not require the largest models!
+## Why LLM-as-a-Verifier Matters, Cont'd
+
+Verification does not require the largest models!
 
 In practice:
+
 - A smaller, efficient model such as Gemini 2.5 Flash
 - Can evaluate and rank outputs generated by a larger model such as Claude Opus 4.6
 
 Key principle:
 - Verification is not about generating complexity; it is about applying structured reasoning.
 
+## Are LLM-as-a-Judge and LLM-as-a-Verifier Replacements?
+
+Not usually. They solve related but different evaluation problems.
+
+- `Judge` is strong for holistic, open-ended assessment.
+- `Verifier` is strong for structured, evidence-based correctness assessment.
+
+## Which One Do You Pick?
+
+| | Judge | Verifier |
+|---|---|---|
+| Evidence required | No | Yes |
+| Scoring style | Holistic rubric | Continuous reward |
+| Best for | Open-ended tasks | Grounded, verifiable tasks |
+| Log probs needed | No | Yes (or text fallback) |
+
+Choosing wrong degrades evaluation quality.
+
+But in a real pipeline, tasks vary — you cannot always hand-pick the evaluator.
+
 ## Limitations
 
 LLM-as-a-Verifier is useful, but not magic.
 
-- Verifier can both still be wrong
+- Verifier can still be wrong
 - Verifier is a system design pattern, not ground truth itself
+- Works best when evidence is available (test cases, ground truth, execution output)
 
-But then which evaluation pattern is the right one for a given task?
-
-That is the question Multi-LLM Consensus answers.
+But the Verifier is only half the picture — it assumes evidence exists.
 
 ## Demo
 
-https://github.com/hsanchez/llm-as-an-oracle.git
+```bash
+git clone https://github.com/hsanchez/llm-as-an-oracle.git
+cd llm-as-an-oracle
+uv sync
+uv run python examples/02_llm_as_an_oracle_tutorial.py
+```
+
+What the demo shows:
+
+- Three agent fixes for a buggy function — one with a latent bug
+- Verifier catches the latent bug using a duplicate-value test case
+- A second open-ended task routes automatically to the Judge
+- Harness measures where the two strategies agree and where they diverge
