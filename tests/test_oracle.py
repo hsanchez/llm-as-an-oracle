@@ -86,7 +86,6 @@ def scoring_config() -> ScoringConfig:
   return ScoringConfig(
     granularity=20,
     num_verifications=2,
-    num_criteria=2,
     use_logprobs=True,
   )
 

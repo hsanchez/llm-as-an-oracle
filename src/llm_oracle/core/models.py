@@ -127,14 +127,12 @@ class ScoringConfig:
   """Scoring configuration shared by both strategies.
 
   Strategy-specific fields: ``use_logprobs`` and ``num_verifications`` apply
-  to the Verifier only; ``num_criteria`` applies to the Judge only.
-  ``fuzzy_threshold`` must be in ``[0.0, 1.0]``; ``enable_fuzzy_alignment``
-  is reserved and currently has no effect.
+  to the Verifier only. ``fuzzy_threshold`` must be in ``[0.0, 1.0]``;
+  ``enable_fuzzy_alignment`` is reserved and currently has no effect.
   """
 
   granularity: int = 20
   num_verifications: int = 4
-  num_criteria: int = 3
   enable_fuzzy_alignment: bool = True
   fuzzy_threshold: float = 0.75
   use_logprobs: bool = True

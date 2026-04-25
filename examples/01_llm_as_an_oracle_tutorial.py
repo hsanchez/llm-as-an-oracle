@@ -146,7 +146,6 @@ stub = StubProvider(
 config = ScoringConfig(
   granularity=20,
   num_verifications=2,
-  num_criteria=3,
   use_logprobs=True,
 )
 

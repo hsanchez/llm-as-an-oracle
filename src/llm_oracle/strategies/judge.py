@@ -116,7 +116,7 @@ class JudgeStrategy(BaseStrategy):
     self.reasoning_depth = reasoning_depth
 
   # ------------------------------------------------------------------ #
-  # BaseStrategy interface                                               #
+  # BaseStrategy interface                                             #
   # ------------------------------------------------------------------ #
 
   def get_strategy_type(self) -> StrategyType:
@@ -257,7 +257,7 @@ class JudgeStrategy(BaseStrategy):
     )
 
   # ------------------------------------------------------------------ #
-  # Prompt construction                                                  #
+  # Prompt construction                                                #
   # ------------------------------------------------------------------ #
 
   def _build_pointwise_prompt(
@@ -382,7 +382,7 @@ required value."""
     )
 
   # ------------------------------------------------------------------ #
-  # Scoring helpers                                                      #
+  # Scoring helpers                                                    #
   # ------------------------------------------------------------------ #
 
   def _score_trajectory_full(

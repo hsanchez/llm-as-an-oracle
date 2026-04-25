@@ -72,7 +72,6 @@ model = AnthropicProvider(
 config = ScoringConfig(
   granularity=20,
   num_verifications=1,
-  num_criteria=2,
   use_logprobs=False,
 )
 
