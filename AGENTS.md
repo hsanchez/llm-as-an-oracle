@@ -127,9 +127,6 @@ Create a new ADR when:
 
 Not every small choice — only significant architectural decisions.
 
-### `docs/slides/`
-
-Slides — locked. **Read only; never edit or add files here.**
 
 ## Git & Commits
 
