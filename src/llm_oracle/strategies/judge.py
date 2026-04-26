@@ -88,17 +88,6 @@ class JudgeStrategy(BaseStrategy):
     rubric text, so values outside ``[1, 10]`` will produce contradictory
     prompts and unreliable scores.  Keep the defaults unless you provide a
     custom rubric via ``additional_params``.
-
-    Args:
-      model: Language model used to generate evaluations.
-      config: Scoring configuration (granularity, verification repeats, etc.).
-      criteria: Evaluation criteria to score against.
-      score_min: Lower bound of the numeric scale (default 1); must be < ``score_max``.
-      score_max: Upper bound of the numeric scale (default 10).
-      swap_pairwise: Run each pairwise comparison twice with swapped order and
-        average the scores to cancel positional bias.
-      reasoning_depth: One of ``"brief"``, ``"detailed"``, or
-        ``"chain_of_thought"``.
     """
     super().__init__(model, config, criteria)
 
@@ -115,9 +104,7 @@ class JudgeStrategy(BaseStrategy):
     self.swap_pairwise = swap_pairwise
     self.reasoning_depth = reasoning_depth
 
-  # ------------------------------------------------------------------ #
-  # BaseStrategy interface                                             #
-  # ------------------------------------------------------------------ #
+  # BaseStrategy interface
 
   def get_strategy_type(self) -> StrategyType:
     return StrategyType.JUDGE
@@ -139,19 +126,19 @@ class JudgeStrategy(BaseStrategy):
     trajectory_scores: dict[str, ScoreResult] = {}
     pairwise_comparisons: list[PairwiseComparison] = []
 
-    # ── Pointwise scoring ────────────────────────────────────────────
+    # Pointwise scoring
     for trajectory in trajectories:
       score_result = self._score_trajectory_full(task, trajectory, **kwargs)
       trajectory_scores[trajectory.id] = score_result
 
-    # ── Pairwise comparisons (tie-breaking & confidence) ─────────────
+    # Pairwise comparisons
     if len(trajectories) > 1:
       for traj_a, traj_b in combinations(trajectories, 2):
         for criterion in self.criteria:
           comparison = self.compare_trajectories(task, traj_a, traj_b, criterion, **kwargs)
           pairwise_comparisons.append(comparison)
 
-    # ── Select best trajectory ───────────────────────────────────────
+    # Select best trajectory
     best_id = self._select_best(trajectories, trajectory_scores, pairwise_comparisons)
 
     return EvaluationResult(
@@ -230,7 +217,6 @@ class JudgeStrategy(BaseStrategy):
     )
 
     if self.swap_pairwise:
-      # Swap order to cancel positional bias; note the score roles are reversed.
       swapped_b, swapped_a, _ = self._single_pairwise(
         task, trajectory_b, trajectory_a, criterion, **gen_kwargs
       )
@@ -256,9 +242,7 @@ class JudgeStrategy(BaseStrategy):
       reasoning=reasoning,
     )
 
-  # ------------------------------------------------------------------ #
-  # Prompt construction                                                #
-  # ------------------------------------------------------------------ #
+  # Prompt construction
 
   def _build_pointwise_prompt(
     self,
@@ -381,9 +365,7 @@ required value."""
       "Show all reasoning explicitly before your final score."
     )
 
-  # ------------------------------------------------------------------ #
-  # Scoring helpers                                                    #
-  # ------------------------------------------------------------------ #
+  # Scoring helpers
 
   def _score_trajectory_full(
     self,
@@ -400,10 +382,8 @@ required value."""
         result = self.score_trajectory(task, trajectory, criterion, **kwargs)
         criterion_scores[criterion.id].append(result.score)
         if rep == 0:
-          # Keep one reasoning example per criterion
           all_reasoning.append(f"[{criterion.name}]\n{result.reasoning.strip()}")
 
-    # Average repeated verifications per criterion
     avg_criterion_scores: dict[str, float] = {
       cid: statistics.mean(scores) for cid, scores in criterion_scores.items() if scores
     }
@@ -440,9 +420,7 @@ required value."""
 
     return score_a, score_b, text
 
-  # ------------------------------------------------------------------ #
-  # Best-trajectory selection                                            #
-  # ------------------------------------------------------------------ #
+  # Best-trajectory selection
 
   def _select_best(
     self,
@@ -486,15 +464,12 @@ required value."""
       elif comp.winner == comp.trajectory_b_id:
         wins[comp.trajectory_b_id] = wins.get(comp.trajectory_b_id, 0.0) + 1.0
       else:
-        # Tie
         wins[comp.trajectory_a_id] = wins.get(comp.trajectory_a_id, 0.0) + 0.5
         wins[comp.trajectory_b_id] = wins.get(comp.trajectory_b_id, 0.0) + 0.5
 
     return {tid: wins[tid] / totals[tid] if totals[tid] > 0 else 0.5 for tid in wins}
 
-  # ------------------------------------------------------------------ #
-  # Parsing utilities                                                    #
-  # ------------------------------------------------------------------ #
+  # Parsing utilities
 
   def _parse_pointwise_score(self, text: str) -> float:
     """Parse a pointwise score from model output, clamped to ``[score_min, score_max]``."""
@@ -517,9 +492,7 @@ required value."""
     # Graceful fallback: return midpoint
     return (self.score_min + self.score_max) / 2.0
 
-  # ------------------------------------------------------------------ #
-  # Normalisation & confidence                                           #
-  # ------------------------------------------------------------------ #
+  # Normalisation & confidence
 
   def _normalize(self, raw: float) -> float:
     """Normalize a raw score from ``[score_min, score_max]`` to ``[0, 1]``."""

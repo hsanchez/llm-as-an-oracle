@@ -20,9 +20,7 @@ from llm_oracle.core.models import ModelConfig
 PositionLogprobs = list[list[tuple[str, float]]]  # [(token_str, log_prob)]
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Base provider
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class BaseProvider(ABC):
@@ -36,7 +34,7 @@ class BaseProvider(ABC):
     self.model_id = model_id
     self._extra: dict[str, Any] = kwargs
 
-  # ── Core API ─────────────────────────────────────────────────────────────────
+  # Core API
 
   @abstractmethod
   def generate(
@@ -54,7 +52,7 @@ class BaseProvider(ABC):
       when ``return_logprobs=False`` or the provider doesn't support them.
     """
 
-  # ── Factory helper ───────────────────────────────────────────────────────────
+  # Factory helper
 
   @classmethod
   def from_config(cls, config: ModelConfig) -> BaseProvider:
@@ -68,9 +66,7 @@ class BaseProvider(ABC):
     return f"{self.__class__.__name__}(model_id={self.model_id!r})"
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # OpenAI provider
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class OpenAIProvider(BaseProvider):
@@ -150,9 +146,7 @@ class OpenAIProvider(BaseProvider):
     return text, tokens, position_logprobs
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Anthropic provider
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class AnthropicProvider(BaseProvider):
@@ -227,9 +221,7 @@ class AnthropicProvider(BaseProvider):
     return "".join(text_parts), None, None
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Gemini provider
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class GeminiProvider(BaseProvider):
@@ -332,9 +324,7 @@ class GeminiProvider(BaseProvider):
     return text, tokens, position_logprobs
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Stub provider (testing / offline use)
-# ──────────────────────────────────────────────────────────────────────────────
+# Stub provider
 
 
 @dataclass
@@ -421,7 +411,7 @@ class StubProvider(BaseProvider):
     )
     return text, tokens, position_logprobs
 
-  # ── Stub helpers ─────────────────────────────────────────────────────────────
+  # Stub helpers
 
   def _synthesise_logprobs(
     self,
@@ -503,9 +493,7 @@ class StubProvider(BaseProvider):
     return dist
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Provider registry
-# ──────────────────────────────────────────────────────────────────────────────
 
 _PROVIDER_REGISTRY: dict[str, type] = {
   "openai": OpenAIProvider,

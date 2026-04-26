@@ -125,7 +125,6 @@ class VerifierStrategy(BaseStrategy):
     """Score a trajectory against one criterion using log probabilities."""
     prompt = self._create_scoring_prompt(task, trajectory, criterion)
 
-    # Generate with log probabilities
     text, tokens, position_logprobs = self.model.generate(
       prompt,
       temperature=self.config.temperature if self.config.temperature is not None else 1.0,
@@ -133,11 +132,9 @@ class VerifierStrategy(BaseStrategy):
       return_logprobs=True,
     )
 
-    # Extract score from log probabilities
     tag = "<score>"
     raw_score, confidence = self._extract_score_from_logprobs(text, tokens, position_logprobs, tag)
 
-    # Normalize to [0, 1]
     normalized_score = self.normalize_score(raw_score)
 
     return ScoreResult(
@@ -164,7 +161,6 @@ class VerifierStrategy(BaseStrategy):
     """Compare two trajectories for a criterion using log probabilities."""
     prompt = self._create_pairwise_prompt(task, trajectory_a, trajectory_b, criterion)
 
-    # Generate with log probabilities
     text, tokens, position_logprobs = self.model.generate(
       prompt,
       temperature=self.config.temperature if self.config.temperature is not None else 1.0,
@@ -172,7 +168,6 @@ class VerifierStrategy(BaseStrategy):
       return_logprobs=True,
     )
 
-    # Extract scores for both trajectories
     score_a, conf_a = self._extract_score_from_logprobs(
       text, tokens, position_logprobs, "<score_A>"
     )
@@ -180,11 +175,9 @@ class VerifierStrategy(BaseStrategy):
       text, tokens, position_logprobs, "<score_B>"
     )
 
-    # Normalize scores
     norm_score_a = self.normalize_score(score_a)
     norm_score_b = self.normalize_score(score_b)
 
-    # Determine winner
     winner = None
     if norm_score_a > norm_score_b:
       winner = trajectory_a.id
@@ -215,7 +208,6 @@ class VerifierStrategy(BaseStrategy):
         result = self.score_trajectory(task, trajectory, criterion)
         criterion_scores[criterion.id].append(result.score)
 
-    # Average scores across repetitions
     avg_criterion_scores = {
       cid: sum(scores) / len(scores) for cid, scores in criterion_scores.items()
     }
@@ -473,7 +465,6 @@ Begin your analysis now."""
       elif avg_score_b > avg_score_a:
         wins[tid_b] += 1.0
       else:
-        # Tie - half win to each
         wins[tid_a] += 0.5
         wins[tid_b] += 0.5
 

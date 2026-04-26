@@ -21,9 +21,7 @@ from llm_oracle.core.models import (
 )
 from llm_oracle.core.strategy import BaseStrategy
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Per-task hardness record
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -42,7 +40,7 @@ class TaskHardnessRecord:
   elapsed_verifier_s: float = 0.0
   elapsed_judge_s: float = 0.0
 
-  # Convenience ---------------------------------------------------------------
+  # Convenience
 
   @property
   def verifier_wins(self) -> bool:
@@ -62,9 +60,7 @@ class TaskHardnessRecord:
     return self.verifier_result.best_trajectory_id == self.judge_result.best_trajectory_id
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Aggregate report
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -78,7 +74,7 @@ class HarnessReport:
   hard_task_threshold: float = 0.6
   total_elapsed_s: float = 0.0
 
-  # ── Slicing helpers ─────────────────────────────────────────────────────────
+  # Slicing helpers
 
   @property
   def hard_tasks(self) -> list[TaskHardnessRecord]:
@@ -121,7 +117,7 @@ class HarnessReport:
     """Judge accuracy restricted to easy tasks."""
     return _accuracy_on(self.easy_tasks, StrategyType.JUDGE)
 
-  # ── Reporting ───────────────────────────────────────────────────────────────
+  # Reporting
 
   def summary(self) -> str:
     """Render a human-readable comparison summary table."""
@@ -199,7 +195,7 @@ class HarnessReport:
 
     return "\n".join(rows)
 
-  # ── Private helpers ─────────────────────────────────────────────────────────
+  # Private helpers
 
   def _avg_elapsed(self, strategy: StrategyType) -> float:
     if not self.task_records:
@@ -216,9 +212,7 @@ class HarnessReport:
     return sum(1 for r in self.task_records if r.strategies_agree) / len(self.task_records)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Harness
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -247,7 +241,7 @@ class EvaluationHarness:
       raise TypeError(f"'judge' must be a JUDGE strategy, got {self.judge.get_strategy_type()}")
     _validate_hardness_weights(self.hardness_weights)
 
-  # ── Public API ───────────────────────────────────────────────────────────────
+  # Public API
 
   def run(
     self,
@@ -304,7 +298,7 @@ class EvaluationHarness:
     record = self._compute_record(task, trajectories, verifier_result, judge_result)
     return record.hardness_score
 
-  # ── Internal run helpers ─────────────────────────────────────────────────────
+  # Internal run helpers
 
   def _run_sequential(
     self,
@@ -326,7 +320,7 @@ class EvaluationHarness:
         records.append(future.result())
     return records
 
-  # ── Record computation ───────────────────────────────────────────────────────
+  # Record computation
 
   def _compute_record(
     self,
@@ -373,7 +367,7 @@ class EvaluationHarness:
       elapsed_judge_s=elapsed_j,
     )
 
-  # ── Report assembly ──────────────────────────────────────────────────────────
+  # Report assembly
 
   def _build_report(
     self,
@@ -400,9 +394,7 @@ class EvaluationHarness:
     )
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Module-level helper functions
-# ──────────────────────────────────────────────────────────────────────────────
+# Module-level helpers
 
 
 def _timed(fn, *args, **kwargs) -> tuple:
@@ -557,9 +549,7 @@ def _validate_hardness_weights(weights: dict[str, float]) -> None:
     )
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Formatting utilities (used by HarnessReport)
-# ──────────────────────────────────────────────────────────────────────────────
+# Formatting utilities
 
 
 def _row(

@@ -21,10 +21,6 @@ from llm_oracle.core.models import (
 )
 from llm_oracle.core.strategy import BaseStrategy
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Constants
-# ──────────────────────────────────────────────────────────────────────────────
-
 # Minimum confidence required to commit to a strategy without fallback.
 _CONFIDENCE_THRESHOLD: float = 0.60
 
@@ -92,9 +88,7 @@ _JUDGEMENT_KEYWORDS: frozenset[str] = frozenset(
 )
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Signal types
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
@@ -133,9 +127,7 @@ class PolicyVote:
   reasoning: str = ""
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Base policy
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class RoutingPolicy(abc.ABC):
@@ -164,9 +156,7 @@ class RoutingPolicy(abc.ABC):
     return f"{self.__class__.__name__}(name={self.name!r}, weight={self.weight})"
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Built-in routing policies
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class GroundTruthPolicy(RoutingPolicy):
@@ -501,9 +491,7 @@ class OutputAvailabilityPolicy(RoutingPolicy):
     )
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Policy chain — aggregate multiple policy votes
-# ──────────────────────────────────────────────────────────────────────────────
+# Policy chain
 
 
 class PolicyChain:
@@ -526,7 +514,7 @@ class PolicyChain:
     self._threshold = confidence_threshold
     self._fallback = fallback_strategy
 
-  # ── Public API ───────────────────────────────────────────────────────────────
+  # Public API
 
   def decide(
     self,
@@ -578,7 +566,7 @@ class PolicyChain:
     """Strategy returned when confidence is below the threshold."""
     return self._fallback
 
-  # ── Private helpers ──────────────────────────────────────────────────────────
+  # Private helpers
 
   @staticmethod
   def _aggregate(votes: list[PolicyVote]) -> tuple[float, float]:
@@ -614,9 +602,7 @@ class PolicyChain:
     return "\n".join(lines)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Signal extractor
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class SignalExtractor:
@@ -666,9 +652,7 @@ class SignalExtractor:
     )
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Extended routing decision (includes per-policy votes)
-# ──────────────────────────────────────────────────────────────────────────────
+# Extended routing decision
 
 
 @dataclass
@@ -680,9 +664,7 @@ class DetailedRoutingDecision(RoutingDecision):
   elapsed_ms: float = 0.0
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Main router
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class OracleRouter:
@@ -703,7 +685,7 @@ class OracleRouter:
     self._hardness_cache: dict[str, float] = hardness_cache or {}
     self._decision_log: list[DetailedRoutingDecision] = []
 
-  # ── Factory constructors ─────────────────────────────────────────────────────
+  # Factory constructors
 
   @classmethod
   def default(
@@ -779,7 +761,7 @@ class OracleRouter:
     chain = PolicyChain([_AlwaysJudgePolicy()], confidence_threshold=0.0)
     return cls(verifier, judge, chain)
 
-  # ── Core routing ─────────────────────────────────────────────────────────────
+  # Core routing
 
   def route(
     self,
@@ -828,7 +810,7 @@ class OracleRouter:
 
     return result, decision
 
-  # ── Policy management ────────────────────────────────────────────────────────
+  # Policy management
 
   def register_policy(
     self,
@@ -856,7 +838,7 @@ class OracleRouter:
       raise ValueError(f"Hardness must be in [0, 1], got {hardness}")
     self._hardness_cache[task_id] = hardness
 
-  # ── Audit & introspection ────────────────────────────────────────────────────
+  # Audit & introspection
 
   @property
   def decision_log(self) -> list[DetailedRoutingDecision]:
@@ -894,7 +876,7 @@ class OracleRouter:
     lines += ["═" * 56, ""]
     return "\n".join(lines)
 
-  # ── Private helpers ──────────────────────────────────────────────────────────
+  # Private helpers
 
   def _resolve_strategy(self, strategy_type: StrategyType) -> BaseStrategy:
     """Map a StrategyType to the corresponding strategy instance.
