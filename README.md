@@ -177,7 +177,7 @@ This repository uses a local `.venv`. If your editor reports imports like
 .venv/bin/python
 ```
 
-In Zed, set the Python interpreter path in your project settings to `.venv/bin/python`.
+In Zed or VSCode, set the Python interpreter path in your project settings to `.venv/bin/python`.
 
 ## 📌 Citation
 
