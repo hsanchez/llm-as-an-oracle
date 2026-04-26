@@ -11,7 +11,7 @@ authors:
   - given-names: Huascar
     family-names: Sanchez
     email: huascar@jellyfish.mozmail.com
-repository-code: "https://github.com/hsanchez/llm-as-oracle"
+repository-code: "https://github.com/hsanchez/llm-as-an-oracle"
 url: "https://github.com/hsanchez/llm-as-an-oracle"
 abstract: "Route, compare, and select between Judge and Verifier LLM evaluators (automatically)."
 keywords:

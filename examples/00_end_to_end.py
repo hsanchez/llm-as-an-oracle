@@ -6,7 +6,7 @@ Swap StubProvider for OpenAIProvider, AnthropicProvider, or GeminiProvider
 and set the corresponding API key environment variable when you are ready
 to use a real model.
 
-    cd llm-as-oracle
+    cd llm-as-an-oracle
     uv run python examples/end_to_end.py
 """
 

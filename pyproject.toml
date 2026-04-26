@@ -1,5 +1,5 @@
 [project]
-name = "llm-as-oracle"
+name = "llm-as-an-oracle"
 version = "0.1.0"
 description = "LLM as Verifier · LLM as Judge · Evaluation Harness · Intelligent Router"
 readme = "README.md"
@@ -30,9 +30,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/hsanchez/llm-as-oracle"
-Repository = "https://github.com/hsanchez/llm-as-oracle"
-Issues = "https://github.com/hsanchez/llm-as-oracle/issues"
+Homepage = "https://github.com/hsanchez/llm-as-an-oracle"
+Repository = "https://github.com/hsanchez/llm-as-an-oracle"
+Issues = "https://github.com/hsanchez/llm-as-an-oracle/issues"
 
 [project.optional-dependencies]
 openai = ["openai>=1.0"]

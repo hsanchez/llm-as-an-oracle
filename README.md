@@ -64,29 +64,29 @@ The policy is convenience first:
 Install directly from GitHub with `uv`:
 
 ```bash
-uv add "llm-as-oracle @ git+https://github.com/hsanchez/llm-as-oracle.git"
+uv add "llm-as-an-oracle @ git+https://github.com/hsanchez/llm-as-an-oracle.git"
 ```
 
 Install provider SDKs only when you need them:
 
 ```bash
-uv add "llm-as-oracle[openai] @ git+https://github.com/hsanchez/llm-as-oracle.git"
-uv add "llm-as-oracle[anthropic] @ git+https://github.com/hsanchez/llm-as-oracle.git"
-uv add "llm-as-oracle[gemini] @ git+https://github.com/hsanchez/llm-as-oracle.git"
-uv add "llm-as-oracle[all] @ git+https://github.com/hsanchez/llm-as-oracle.git"
+uv add "llm-as-an-oracle[openai] @ git+https://github.com/hsanchez/llm-as-an-oracle.git"
+uv add "llm-as-an-oracle[anthropic] @ git+https://github.com/hsanchez/llm-as-an-oracle.git"
+uv add "llm-as-an-oracle[gemini] @ git+https://github.com/hsanchez/llm-as-an-oracle.git"
+uv add "llm-as-an-oracle[all] @ git+https://github.com/hsanchez/llm-as-an-oracle.git"
 ```
 
 With `pip`:
 
 ```bash
-pip install "llm-as-oracle @ git+https://github.com/hsanchez/llm-as-oracle.git"
+pip install "llm-as-an-oracle @ git+https://github.com/hsanchez/llm-as-an-oracle.git"
 ```
 
 From a local clone:
 
 ```bash
-git clone https://github.com/hsanchez/llm-as-oracle.git
-cd llm-as-oracle
+git clone https://github.com/hsanchez/llm-as-an-oracle.git
+cd llm-as-an-oracle
 uv pip install .
 ```
 
