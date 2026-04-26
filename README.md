@@ -59,6 +59,37 @@ The policy is convenience first:
 - the common set is the default user-facing surface
 - advanced names are still public, but not the first thing new users need to learn
 
+## Installation
+
+Install directly from GitHub with `uv`:
+
+```bash
+uv add "llm-as-oracle @ git+https://github.com/hsanchez/llm-as-oracle.git"
+```
+
+Install provider SDKs only when you need them:
+
+```bash
+uv add "llm-as-oracle[openai] @ git+https://github.com/hsanchez/llm-as-oracle.git"
+uv add "llm-as-oracle[anthropic] @ git+https://github.com/hsanchez/llm-as-oracle.git"
+uv add "llm-as-oracle[gemini] @ git+https://github.com/hsanchez/llm-as-oracle.git"
+uv add "llm-as-oracle[all] @ git+https://github.com/hsanchez/llm-as-oracle.git"
+```
+
+With `pip`:
+
+```bash
+pip install "llm-as-oracle @ git+https://github.com/hsanchez/llm-as-oracle.git"
+```
+
+From a local clone:
+
+```bash
+git clone https://github.com/hsanchez/llm-as-oracle.git
+cd llm-as-oracle
+uv pip install .
+```
+
 ## How the Oracle Works
 
 `OracleRouter` is a deterministic routing layer that decides whether a task
@@ -123,17 +154,14 @@ At the harness level, `EvaluationHarness` computes:
 ## CLI USAGE
 
 ```bash
-# Run the offline demo (no API keys needed)
-uv run python -m llm_oracle demo
+# Print package information
+uv run python -m llm_oracle info
 
 # Route a task and inspect the decision
 uv run python -m llm_oracle route --task "Implement quicksort" --difficulty hard --ground-truth
 
 # Compare both strategies on a task
 uv run python -m llm_oracle compare --task "Explain merge sort" --trajectories 3
-
-# Run the test suite (148 tests)
-uv run python -m llm_oracle test
 ```
 
 ## Development Setup

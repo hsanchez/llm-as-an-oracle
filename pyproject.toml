@@ -3,7 +3,7 @@ name = "llm-as-oracle"
 version = "0.1.0"
 description = "LLM as Verifier · LLM as Judge · Evaluation Harness · Intelligent Router"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 authors = [
   { name = "Huascar Sanchez", email = "huascar@jellyfish.mozmail.com" },
 ]
@@ -18,14 +18,15 @@ classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Typing :: Typed",
 ]
 
 dependencies = [
-    "anthropic>=0.96.0",
-    "python-dotenv>=1.2.2",
+  "python-dotenv>=1.2.2",
 ]
 
 [project.urls]
@@ -35,11 +36,11 @@ Issues = "https://github.com/hsanchez/llm-as-oracle/issues"
 
 [project.optional-dependencies]
 openai = ["openai>=1.0"]
-anthropic = ["anthropic>=0.20"]
+anthropic = ["anthropic>=0.96.0"]
 gemini = ["google-genai>=0.8"]
 all = [
   "openai>=1.0",
-  "anthropic>=0.20",
+  "anthropic>=0.96.0",
   "google-genai>=0.8",
 ]
 dev = [
@@ -63,6 +64,23 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/llm_oracle"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "/.claude",
+  "/.DS_Store",
+  "/.github",
+  "/.pytest_cache",
+  "/.venv",
+  "/AGENTS.md",
+  "/CLAUDE.md",
+  "/CODEX.md",
+  "/GEMINI.md",
+  "/MEMORY.md",
+  "/MEMORY_LOG.md",
+  "/dev-docs",
+  "/dist",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

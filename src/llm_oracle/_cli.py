@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 import textwrap
 
@@ -82,19 +81,6 @@ def cmd_info(_args: argparse.Namespace) -> None:
   for name, weight, desc in policies:
     _info(f"  {name:<28s}  {weight}  {desc}")
   print()
-
-
-def cmd_demo(_args: argparse.Namespace) -> None:
-  """Run the full end-to-end demo (offline, no API keys)."""
-  _banner("LLM Oracle — End-to-End Demo")
-  _info("Running examples/end_to_end.py …")
-  print()
-
-  result = subprocess.run(
-    [sys.executable, "examples/end_to_end.py"],
-    check=False,
-  )
-  sys.exit(result.returncode)
 
 
 def cmd_route(args: argparse.Namespace) -> None:
@@ -271,19 +257,6 @@ def cmd_compare(args: argparse.Namespace) -> None:
   print()
 
 
-def cmd_test(_args: argparse.Namespace) -> None:
-  """Run the test suite via pytest."""
-  _banner("LLM Oracle — Test Suite")
-  _info("Running pytest …")
-  print()
-
-  result = subprocess.run(
-    [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=short"],
-    check=False,
-  )
-  sys.exit(result.returncode)
-
-
 def build_parser() -> argparse.ArgumentParser:
   parser = argparse.ArgumentParser(
     prog="llm-oracle",
@@ -293,17 +266,14 @@ def build_parser() -> argparse.ArgumentParser:
             Commands
             --------
               info     Print package version and component overview
-              demo     Run the full end-to-end offline demo
               route    Route a task to verifier or judge and inspect the decision
               compare  Score a task with both strategies side-by-side
-              test     Run the test suite
         """),
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
   sub = parser.add_subparsers(dest="command", metavar="<command>")
 
   sub.add_parser("info", help="Print package version and component overview")
-  sub.add_parser("demo", help="Run the full end-to-end offline demo")
 
   route_p = sub.add_parser("route", help="Route a task and inspect the decision")
   route_p.add_argument("--task", "-t", required=True, help="Natural-language task description")
@@ -323,8 +293,6 @@ def build_parser() -> argparse.ArgumentParser:
   compare_p.add_argument("--task", "-t", required=True, help="Natural-language task description")
   compare_p.add_argument("--trajectories", "-n", type=int, default=2, metavar="N")
 
-  sub.add_parser("test", help="Run the test suite via pytest")
-
   return parser
 
 
@@ -334,10 +302,8 @@ def main(argv: list[str] | None = None) -> None:
 
   dispatch = {
     "info": cmd_info,
-    "demo": cmd_demo,
     "route": cmd_route,
     "compare": cmd_compare,
-    "test": cmd_test,
   }
 
   if args.command is None:
