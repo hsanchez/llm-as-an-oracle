@@ -1591,7 +1591,7 @@ class TestOracleRouter:
       id="open-essay",
       description="Write an essay",
       problem_statement=(
-        "Write a comparative essay analysing the trade-offs between "
+        "Write a comparative essay analyzing the trade-offs between "
         "two competing software design patterns."
       ),
       difficulty=TaskDifficulty.EASY,
