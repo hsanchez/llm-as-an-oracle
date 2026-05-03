@@ -4,23 +4,17 @@ All providers normalize vendor responses into ``(text, tokens, position_logprobs
 and use lazy SDK imports so missing optional dependencies don't break module import.
 """
 
-from __future__ import annotations
-
 import math
 import os
 import random
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field  # noqa: F401
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, cast
 
 from llm_oracle.core.models import ModelConfig
 
-# Type alias matching BaseStrategy.LanguageModel protocol
 PositionLogprobs = list[list[tuple[str, float]]]  # [(token_str, log_prob)]
-
-
-# Base provider
 
 
 class BaseProvider(ABC):
@@ -33,8 +27,6 @@ class BaseProvider(ABC):
   def __init__(self, model_id: str, **kwargs: Any) -> None:
     self.model_id = model_id
     self._extra: dict[str, Any] = kwargs
-
-  # Core API
 
   @abstractmethod
   def generate(
@@ -52,10 +44,8 @@ class BaseProvider(ABC):
       when ``return_logprobs=False`` or the provider doesn't support them.
     """
 
-  # Factory helper
-
   @classmethod
-  def from_config(cls, config: ModelConfig) -> BaseProvider:
+  def from_config(cls, config: ModelConfig) -> "BaseProvider":
     """Instantiate a provider from a ModelConfig."""
     kwargs: dict[str, Any] = dict(config.additional_params)
     if config.api_key:
@@ -66,14 +56,13 @@ class BaseProvider(ABC):
     return f"{self.__class__.__name__}(model_id={self.model_id!r})"
 
 
-# OpenAI provider
-
-
 class OpenAIProvider(BaseProvider):
   """OpenAI chat completion provider (openai >= 1.0).
 
   Supports gpt-* and o* model families, top_logprobs extraction, and
-  Azure OpenAI via ``base_url`` + ``api_version`` kwargs.
+  Azure OpenAI via ``base_url`` + ``api_version`` kwargs. Provider
+  constructors initialize SDK clients so missing optional dependencies and
+  credentials fail before evaluation starts.
   """
 
   def __init__(
@@ -146,15 +135,13 @@ class OpenAIProvider(BaseProvider):
     return text, tokens, position_logprobs
 
 
-# Anthropic provider
-
-
 class AnthropicProvider(BaseProvider):
   """Anthropic Messages API provider (anthropic >= 0.20).
 
   Anthropic does not expose token-level log probabilities, so
   ``position_logprobs`` is always ``None``; the verifier falls back to
-  text-based score extraction.
+  text-based score extraction. Provider constructors initialize SDK clients so
+  missing optional dependencies and credentials fail before evaluation starts.
   """
 
   def __init__(
@@ -164,7 +151,7 @@ class AnthropicProvider(BaseProvider):
     api_key: str | None = None,
     system: str | None = None,
     thinking: bool = False,
-    budget_tokens: int = 8000,
+    budget_tokens: int = 1024,
     **kwargs: Any,
   ) -> None:
     super().__init__(model_id, **kwargs)
@@ -197,13 +184,18 @@ class AnthropicProvider(BaseProvider):
       **kwargs,
     }
 
-    # Extended thinking uses a fixed temperature of 1; otherwise pass through.
     if self._thinking:
+      # Anthropic requires the thinking budget to be lower than max_tokens.
+      if self._budget_tokens >= max_tokens:
+        raise ValueError(
+          f"budget_tokens ({self._budget_tokens}) must be less than max_tokens ({max_tokens}) "
+          "for extended thinking. Increase max_tokens or lower budget_tokens."
+        )
       request["thinking"] = {
         "type": "enabled",
         "budget_tokens": self._budget_tokens,
       }
-      request["temperature"] = 1.0  # Required for extended thinking
+      request["temperature"] = 1.0
     else:
       request["temperature"] = temperature
 
@@ -212,7 +204,6 @@ class AnthropicProvider(BaseProvider):
 
     response = self._client.messages.create(**request)
 
-    # Collect only text blocks (skip thinking blocks)
     text_parts: list[str] = []
     for block in response.content:
       if getattr(block, "type", None) == "text":
@@ -221,14 +212,13 @@ class AnthropicProvider(BaseProvider):
     return "".join(text_parts), None, None
 
 
-# Gemini provider
-
-
 class GeminiProvider(BaseProvider):
   """Google Gemini provider via the google-genai SDK (>= 0.8).
 
   Uses Vertex AI when ``vertexai=True`` or ``VERTEX_API_KEY`` is set;
-  otherwise uses ``GEMINI_API_KEY``. Supports logprob extraction.
+  otherwise uses ``GEMINI_API_KEY``. Supports logprob extraction. Provider
+  constructors initialize SDK clients so missing optional dependencies and
+  credentials fail before evaluation starts.
   """
 
   def __init__(
@@ -310,21 +300,25 @@ class GeminiProvider(BaseProvider):
     if return_logprobs:
       candidate = response.candidates[0] if response.candidates else None
       if candidate and candidate.logprobs_result:
-        lr = candidate.logprobs_result
-        if lr.top_candidates:
+        logprobs_result = candidate.logprobs_result
+        if logprobs_result.top_candidates:
           position_logprobs = []
-          for pos in lr.top_candidates:
-            alts: list[tuple[str, float]] = [
-              (lp.token, lp.log_probability) for lp in pos.candidates
+          for position in logprobs_result.top_candidates:
+            candidates = position.candidates or []
+            alternatives: list[tuple[str, float]] = [
+              (logprob.token, logprob.log_probability)
+              for logprob in candidates
+              if logprob.token is not None and logprob.log_probability is not None
             ]
-            position_logprobs.append(alts)
-        if lr.chosen_candidates:
-          tokens = [c.token for c in lr.chosen_candidates]
+            position_logprobs.append(alternatives)
+        if logprobs_result.chosen_candidates:
+          tokens = [
+            candidate.token
+            for candidate in logprobs_result.chosen_candidates
+            if candidate.token is not None
+          ]
 
     return text, tokens, position_logprobs
-
-
-# Stub provider
 
 
 @dataclass
@@ -373,7 +367,6 @@ class StubProvider(BaseProvider):
     **kwargs: Any,
   ) -> tuple[str, list[str] | None, PositionLogprobs | None]:
     """Return a pre-programmed or synthesized response."""
-    # Pick response template
     if self._responses:
       stub = self._responses[self._call_count % len(self._responses)]
     else:
@@ -381,13 +374,11 @@ class StubProvider(BaseProvider):
 
     self._call_count += 1
 
-    # Determine scores based on prompt type
     is_pairwise = "<score_A>" in prompt or "<score_B>" in prompt
     score_a = stub.score_a or self._default_score_a
     score_b = stub.score_b or self._default_score_b
     score = stub.score or self._default_score
 
-    # Build response text with embedded score tags
     if is_pairwise:
       text = stub.text or (
         f"Analysis:\n"
@@ -405,13 +396,10 @@ class StubProvider(BaseProvider):
     if not return_logprobs:
       return text, None, None
 
-    # Synthesise log-probability distributions
     tokens, position_logprobs = self._synthesise_logprobs(
       text, score, score_a, score_b, is_pairwise
     )
     return text, tokens, position_logprobs
-
-  # Stub helpers
 
   def _synthesise_logprobs(
     self,
@@ -422,27 +410,22 @@ class StubProvider(BaseProvider):
     is_pairwise: bool,
   ) -> tuple[list[str], PositionLogprobs]:
     """Generate synthetic token + logprob arrays (~70% mass on the target score token)."""
-    # Naïve character-level tokenisation — good enough for the stub.
     raw_tokens = list(text)
     tokens: list[str] = raw_tokens
     position_logprobs: PositionLogprobs = []
 
     alphabet = list("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
-    tag_positions = self._find_tag_token_positions(text, is_pairwise)
-
+    tag_positions = self._find_tag_token_positions(text, is_pairwise, score, score_a, score_b)
     for i, tok in enumerate(tokens):
       if i in tag_positions:
-        # At a scoring position: emit a peaked distribution.
         target_letter = tag_positions[i]
         probs = self._peaked_distribution(target_letter, alphabet, peak=0.70)
         lps: list[tuple[str, float]] = [
           (letter, math.log(p + 1e-12)) for letter, p in probs.items()
         ]
-        # Sort by descending probability
         lps.sort(key=lambda x: -x[1])
         position_logprobs.append(lps[:20])
       else:
-        # Non-scoring position: flat distribution over ASCII printable chars.
         base_lp = math.log(1.0 / max(len(alphabet), 1))
         position_logprobs.append([(tok, base_lp)])
 
@@ -452,15 +435,14 @@ class StubProvider(BaseProvider):
     self,
     text: str,
     is_pairwise: bool,
+    score: str,
+    score_a: str,
+    score_b: str,
   ) -> dict[int, str]:
     """Return ``{char_index: target_letter}`` for each score tag position."""
     positions: dict[int, str] = {}
 
-    tags = (
-      [("<score_A>", self._default_score_a), ("<score_B>", self._default_score_b)]
-      if is_pairwise
-      else [("<score>", self._default_score)]
-    )
+    tags = [("<score_A>", score_a), ("<score_B>", score_b)] if is_pairwise else [("<score>", score)]
 
     for tag, target in tags:
       for match in re.finditer(re.escape(tag), text):
@@ -480,7 +462,6 @@ class StubProvider(BaseProvider):
     if not others:
       return {target: 1.0}
 
-    # Spread remaining mass uniformly among a random subset of neighbours.
     n_neighbours = min(self._rng.randint(3, 8), len(others))
     neighbours = self._rng.sample(others, n_neighbours)
     per_neighbour = remaining / n_neighbours
@@ -493,9 +474,7 @@ class StubProvider(BaseProvider):
     return dist
 
 
-# Provider registry
-
-_PROVIDER_REGISTRY: dict[str, type] = {
+_PROVIDER_REGISTRY: dict[str, type[BaseProvider]] = {
   "openai": OpenAIProvider,
   "anthropic": AnthropicProvider,
   "gemini": GeminiProvider,
@@ -504,7 +483,7 @@ _PROVIDER_REGISTRY: dict[str, type] = {
 }
 
 
-def get_provider(name: str) -> type:
+def get_provider(name: str) -> type[BaseProvider]:
   """Look up a provider class by registry name (case-insensitive).
 
   Raises:
@@ -517,7 +496,7 @@ def get_provider(name: str) -> type:
   return _PROVIDER_REGISTRY[key]
 
 
-def register_provider(name: str, provider_class: type) -> None:
+def register_provider(name: str, provider_class: type[Any]) -> None:
   """Register a custom provider class under *name* (case-insensitive).
 
   Raises:
@@ -525,7 +504,7 @@ def register_provider(name: str, provider_class: type) -> None:
   """
   if not callable(getattr(provider_class, "generate", None)):
     raise TypeError(f"{provider_class!r} must implement a callable 'generate' method.")
-  _PROVIDER_REGISTRY[name.strip().lower()] = provider_class
+  _PROVIDER_REGISTRY[name.strip().lower()] = cast(type[BaseProvider], provider_class)
 
 
 def create_provider(config: ModelConfig) -> BaseProvider:
@@ -535,12 +514,10 @@ def create_provider(config: ModelConfig) -> BaseProvider:
   (``gpt-``/``o1``/``o3`` → OpenAI, ``claude`` → Anthropic, ``gemini`` →
   Gemini, ``stub`` → Stub) → raises ValueError.
   """
-  # Explicit provider name takes priority.
   if config.provider:
     provider_cls = get_provider(config.provider)
     return provider_cls.from_config(config)
 
-  # Infer from model_id prefix.
   model_lower = (config.model_id or "").lower()
   if model_lower.startswith("gpt") or model_lower.startswith("o1") or model_lower.startswith("o3"):
     return OpenAIProvider.from_config(config)

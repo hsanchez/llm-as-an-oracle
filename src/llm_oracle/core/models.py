@@ -1,7 +1,5 @@
 """Core data models and types for the LLM Oracle system."""
 
-from __future__ import annotations
-
 import enum
 from collections.abc import Sequence
 from dataclasses import dataclass, field

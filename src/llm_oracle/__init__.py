@@ -5,8 +5,6 @@ Harness, and Oracle-based evaluation pipelines. Advanced routing, provider,
 and base-abstraction names are also available here for convenience.
 """
 
-from __future__ import annotations
-
 # ── Core models ───────────────────────────────────────────────────────────────
 from llm_oracle.core.models import (
   CriterionList,

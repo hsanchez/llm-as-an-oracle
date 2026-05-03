@@ -15,15 +15,13 @@ Run with:
     pytest tests/test_oracle.py -v
 """
 
-from __future__ import annotations
-
 import math
+import re
+import sys
+from typing import Any, cast
 
 import pytest
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Package imports
-# ──────────────────────────────────────────────────────────────────────────────
 from llm_oracle import (
   EvaluationCriterion,
   EvaluationHarness,
@@ -41,8 +39,18 @@ from llm_oracle import (
   StubResponse,
   Task,
   TaskDifficulty,
+  TaskHardnessRecord,
   Trajectory,
   VerifierStrategy,
+  create_provider,
+  get_provider,
+  register_provider,
+)
+from llm_oracle.evaluation.harness import (
+  _inter_strategy_score_spread,
+  _oracle_gap,
+  _pairwise_disagreement,
+  _validate_hardness_weights,
 )
 from llm_oracle.routing.router import (
   DetailedRoutingDecision,
@@ -57,10 +65,6 @@ from llm_oracle.routing.router import (
   SignalExtractor,
   TrajectoryCountPolicy,
 )
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Shared fixtures
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture()
@@ -204,15 +208,10 @@ def router(verifier, judge) -> OracleRouter:
   return OracleRouter.default(verifier, judge)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 1.  Core model tests
-# ──────────────────────────────────────────────────────────────────────────────
-
-
 class TestCoreModels:
   def test_task_is_frozen(self, easy_task: Task) -> None:
     with pytest.raises((AttributeError, TypeError)):
-      easy_task.id = "mutated"  # type: ignore[misc]
+      delattr(easy_task, "id")
 
   def test_task_defaults(self) -> None:
     task = Task(id="t", description="d", problem_statement="p")
@@ -231,38 +230,33 @@ class TestCoreModels:
     assert c.weight == 1.0
 
   def test_scoring_config_defaults(self) -> None:
-    cfg = ScoringConfig()
-    assert cfg.granularity == 20
-    assert cfg.num_verifications == 4
-    assert cfg.use_logprobs is True
+    config = ScoringConfig()
+    assert config.granularity == 20
+    assert config.num_verifications == 4
+    assert config.use_logprobs is True
 
   def test_score_result_criterion_scores(self) -> None:
-    sr = ScoreResult(
+    score_result = ScoreResult(
       trajectory_id="t1",
       score=0.75,
       criterion_scores={"correctness": 0.8, "clarity": 0.7},
     )
-    assert len(sr.criterion_scores) == 2
-    assert sr.criterion_scores["correctness"] == pytest.approx(0.8)
+    assert len(score_result.criterion_scores) == 2
+    assert score_result.criterion_scores["correctness"] == pytest.approx(0.8)
 
   def test_pairwise_comparison_winner_none_on_tie(self) -> None:
-    pc = PairwiseComparison(
+    pairwise_comparison = PairwiseComparison(
       trajectory_a_id="a",
       trajectory_b_id="b",
       score_a=0.5,
       score_b=0.5,
     )
-    assert pc.winner is None
+    assert pairwise_comparison.winner is None
 
   def test_model_config_defaults(self) -> None:
-    cfg = ModelConfig(model_id="gpt-4o", provider="openai")
-    assert cfg.temperature == 1.0
-    assert cfg.additional_params == {}
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 2.  StubProvider tests
-# ──────────────────────────────────────────────────────────────────────────────
+    config = ModelConfig(model_id="gpt-4o", provider="openai")
+    assert config.temperature == 1.0
+    assert config.additional_params == {}
 
 
 class TestStubProvider:
@@ -302,15 +296,13 @@ class TestStubProvider:
       return_logprobs=True,
     )
     assert logprobs is not None
-    # Find position after <score> tag
     full_text = "".join(tokens or [])
     tag = "<score>"
-    idx = full_text.find(tag)
-    if idx >= 0 and idx + len(tag) < len(logprobs):
-      pos_lps = logprobs[idx + len(tag)]
-      # The top token should have log_prob > log(0.5)
-      top_lp = max(lp for _, lp in pos_lps)
-      assert top_lp > math.log(0.5)
+    score_tag_index = full_text.find(tag)
+    if score_tag_index >= 0 and score_tag_index + len(tag) < len(logprobs):
+      position_logprobs = logprobs[score_tag_index + len(tag)]
+      top_logprob = max(lp for _, lp in position_logprobs)
+      assert top_logprob > math.log(0.5)
 
   def test_round_robin_responses(self) -> None:
     responses = [
@@ -320,22 +312,17 @@ class TestStubProvider:
     model = StubProvider(responses=responses)
     text0, _, _ = model.generate("prompt")
     text1, _, _ = model.generate("prompt")
-    text2, _, _ = model.generate("prompt")  # wraps around
+    text2, _, _ = model.generate("prompt")
 
     assert "A" in text0
     assert "T" in text1
-    assert "A" in text2  # cycled back
+    assert "A" in text2
 
   def test_call_count_increments(self, stub_model: StubProvider) -> None:
     assert stub_model._call_count == 0
     stub_model.generate("p1")
     stub_model.generate("p2")
     assert stub_model._call_count == 2
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 3.  BaseStrategy helpers
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class TestBaseStrategy:
@@ -364,13 +351,12 @@ class TestBaseStrategy:
     assert verifier.normalize_score(999.0) == 1.0
 
   def test_normalize_score_midpoint(self, verifier: VerifierStrategy) -> None:
-    g = verifier.config.granularity
-    mid = (1.0 + g) / 2.0
+    granularity = verifier.config.granularity
+    mid = (1.0 + granularity) / 2.0
     norm = verifier.normalize_score(mid)
     assert 0.0 < norm < 1.0
 
   def test_aggregate_criterion_scores_weighted(self, verifier: VerifierStrategy) -> None:
-    # correctness weight=1.5, clarity weight=1.0
     scores = {"correctness": 1.0, "clarity": 0.0}
     agg = verifier.aggregate_criterion_scores(scores)
     expected = (1.0 * 1.5 + 0.0 * 1.0) / (1.5 + 1.0)
@@ -387,7 +373,6 @@ class TestBaseStrategy:
 
   def test_scale_has_correct_granularity(self, verifier: VerifierStrategy) -> None:
     scale = verifier.get_scale_description()
-    # Each letter A-T and its lowercase counterpart
     unique_values = set(scale["valid_tokens"].values())
     assert len(unique_values) == verifier.config.granularity
 
@@ -407,11 +392,6 @@ class TestBaseStrategy:
   ) -> None:
     with pytest.raises(ValueError):
       verifier.select_best_trajectory(easy_task, [], {})
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 4.  VerifierStrategy tests
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class TestVerifierStrategy:
@@ -448,12 +428,14 @@ class TestVerifierStrategy:
     trajectories: list[Trajectory],
     criteria: list[EvaluationCriterion],
   ) -> None:
-    comp = verifier.compare_trajectories(easy_task, trajectories[0], trajectories[1], criteria[0])
-    assert isinstance(comp, PairwiseComparison)
-    assert comp.trajectory_a_id == trajectories[0].id
-    assert comp.trajectory_b_id == trajectories[1].id
-    assert 0.0 <= comp.score_a <= 1.0
-    assert 0.0 <= comp.score_b <= 1.0
+    comparison = verifier.compare_trajectories(
+      easy_task, trajectories[0], trajectories[1], criteria[0]
+    )
+    assert isinstance(comparison, PairwiseComparison)
+    assert comparison.trajectory_a_id == trajectories[0].id
+    assert comparison.trajectory_b_id == trajectories[1].id
+    assert 0.0 <= comparison.score_a <= 1.0
+    assert 0.0 <= comparison.score_b <= 1.0
 
   def test_compare_trajectories_winner_is_valid(
     self,
@@ -462,9 +444,11 @@ class TestVerifierStrategy:
     trajectories: list[Trajectory],
     criteria: list[EvaluationCriterion],
   ) -> None:
-    comp = verifier.compare_trajectories(easy_task, trajectories[0], trajectories[1], criteria[0])
+    comparison = verifier.compare_trajectories(
+      easy_task, trajectories[0], trajectories[1], criteria[0]
+    )
     valid_winners = {trajectories[0].id, trajectories[1].id, None}
-    assert comp.winner in valid_winners
+    assert comparison.winner in valid_winners
 
   def test_evaluate_single_trajectory(
     self,
@@ -484,8 +468,8 @@ class TestVerifierStrategy:
     trajectories: list[Trajectory],
   ) -> None:
     result = verifier.evaluate(easy_task, trajectories)
-    traj_ids = {t.id for t in trajectories}
-    assert result.best_trajectory_id in traj_ids
+    trajectory_ids = {t.id for t in trajectories}
+    assert result.best_trajectory_id in trajectory_ids
     assert result.task_id == easy_task.id
     assert len(result.trajectory_scores) == len(trajectories)
 
@@ -502,7 +486,6 @@ class TestVerifierStrategy:
     trajectories: list[Trajectory],
   ) -> None:
     result = verifier.evaluate(easy_task, trajectories[:2])
-    # Should have at least one pairwise comparison per criterion per verification
     assert len(result.pairwise_comparisons) >= 1
 
   def test_evaluate_metadata_contains_granularity(
@@ -521,11 +504,8 @@ class TestVerifierStrategy:
     trajectories: list[Trajectory],
   ) -> None:
     """Tournament should select the trajectory with the most comparison wins."""
-    # Inject biased comparisons where traj-a always wins
-    from llm_oracle.core.models import PairwiseComparison as PC
-
     biased: list[PairwiseComparison] = [
-      PC(
+      PairwiseComparison(
         trajectory_a_id="traj-a",
         trajectory_b_id="traj-b",
         score_a=0.9,
@@ -533,7 +513,7 @@ class TestVerifierStrategy:
         winner="traj-a",
         criterion_id="correctness",
       ),
-      PC(
+      PairwiseComparison(
         trajectory_a_id="traj-a",
         trajectory_b_id="traj-c",
         score_a=0.9,
@@ -541,7 +521,7 @@ class TestVerifierStrategy:
         winner="traj-a",
         criterion_id="correctness",
       ),
-      PC(
+      PairwiseComparison(
         trajectory_a_id="traj-b",
         trajectory_b_id="traj-c",
         score_a=0.8,
@@ -560,9 +540,8 @@ class TestVerifierStrategy:
     """When logprobs are None, fall back to text parsing."""
     text = "Analysis complete.\n<score>C</score>"
     raw_score, confidence = verifier._extract_score_from_logprobs(text, None, None, "<score>")
-    # C is 3rd from top in 20-point scale → raw_score = 18.0
     assert raw_score == pytest.approx(18.0)
-    assert confidence > 0.5  # text extraction returns moderate confidence
+    assert confidence > 0.5
 
   def test_score_extraction_defaults_to_midpoint_on_parse_failure(
     self, verifier: VerifierStrategy
@@ -571,11 +550,6 @@ class TestVerifierStrategy:
     raw_score, confidence = verifier._extract_score_from_logprobs(text, None, None, "<score>")
     assert raw_score == pytest.approx(verifier.config.granularity / 2.0)
     assert confidence == pytest.approx(0.5)
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 5.  JudgeStrategy tests
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class TestJudgeStrategy:
@@ -634,10 +608,12 @@ class TestJudgeStrategy:
     criteria: list[EvaluationCriterion],
   ) -> None:
     """With swap_pairwise=True, scores should be averaged over two orderings."""
-    comp = judge.compare_trajectories(easy_task, trajectories[0], trajectories[1], criteria[0])
-    assert isinstance(comp, PairwiseComparison)
-    assert 0.0 <= comp.score_a <= 1.0
-    assert 0.0 <= comp.score_b <= 1.0
+    comparison = judge.compare_trajectories(
+      easy_task, trajectories[0], trajectories[1], criteria[0]
+    )
+    assert isinstance(comparison, PairwiseComparison)
+    assert 0.0 <= comparison.score_a <= 1.0
+    assert 0.0 <= comparison.score_b <= 1.0
 
   def test_compare_trajectories_winner_is_valid(
     self,
@@ -646,8 +622,10 @@ class TestJudgeStrategy:
     trajectories: list[Trajectory],
     criteria: list[EvaluationCriterion],
   ) -> None:
-    comp = judge.compare_trajectories(easy_task, trajectories[0], trajectories[1], criteria[0])
-    assert comp.winner in {trajectories[0].id, trajectories[1].id, None}
+    comparison = judge.compare_trajectories(
+      easy_task, trajectories[0], trajectories[1], criteria[0]
+    )
+    assert comparison.winner in {trajectories[0].id, trajectories[1].id, None}
 
   def test_evaluate_single_trajectory(
     self,
@@ -666,8 +644,8 @@ class TestJudgeStrategy:
     trajectories: list[Trajectory],
   ) -> None:
     result = judge.evaluate(easy_task, trajectories)
-    traj_ids = {t.id for t in trajectories}
-    assert result.best_trajectory_id in traj_ids
+    trajectory_ids = {t.id for t in trajectories}
+    assert result.best_trajectory_id in trajectory_ids
     assert len(result.trajectory_scores) == len(trajectories)
 
   def test_evaluate_empty_trajectories_raises(self, judge: JudgeStrategy, easy_task: Task) -> None:
@@ -712,7 +690,7 @@ class TestJudgeStrategy:
   def test_normalize_clamps_to_unit_interval(self, judge: JudgeStrategy) -> None:
     assert judge._normalize(0.0) == pytest.approx(0.0)
     assert judge._normalize(10.0) == pytest.approx(1.0)
-    assert judge._normalize(11.0) == pytest.approx(1.0)  # clamped
+    assert judge._normalize(11.0) == pytest.approx(1.0)
 
   def test_score_to_confidence_extremes_are_high(self, judge: JudgeStrategy) -> None:
     conf_low = judge._score_to_confidence(1.0)
@@ -725,37 +703,28 @@ class TestJudgeStrategy:
     assert judge._pairwise_confidence(1.0, 10.0) > judge._pairwise_confidence(5.0, 5.5)
 
   def test_parse_tagged_float_missing_tag_returns_midpoint(self, judge: JudgeStrategy) -> None:
-    import re
-
     pattern = re.compile(r"<score>\s*(\d+(?:\.\d+)?)\s*</score>", re.IGNORECASE)
-    val = judge._parse_tagged_float("no score here", pattern)
+    parsed_score = judge._parse_tagged_float("no score here", pattern)
     expected_mid = (judge.score_min + judge.score_max) / 2.0
-    assert val == pytest.approx(expected_mid)
+    assert parsed_score == pytest.approx(expected_mid)
 
   def test_parse_tagged_float_valid(self, judge: JudgeStrategy) -> None:
-    import re
-
     pattern = re.compile(r"<score>\s*(\d+(?:\.\d+)?)\s*</score>", re.IGNORECASE)
-    val = judge._parse_tagged_float("Analysis.\n<score>8.5</score>", pattern)
-    assert val == pytest.approx(8.5)
+    parsed_score = judge._parse_tagged_float("Analysis.\n<score>8.5</score>", pattern)
+    assert parsed_score == pytest.approx(8.5)
 
   def test_win_rate_computation(
     self,
     judge: JudgeStrategy,
     trajectories: list[Trajectory],
   ) -> None:
-    comps = [
+    comparisons = [
       PairwiseComparison("traj-a", "traj-b", 0.8, 0.3, winner="traj-a"),
       PairwiseComparison("traj-a", "traj-c", 0.7, 0.2, winner="traj-a"),
       PairwiseComparison("traj-b", "traj-c", 0.6, 0.3, winner="traj-b"),
     ]
-    win_rates = judge._compute_win_rates(trajectories, comps)
+    win_rates = judge._compute_win_rates(trajectories, comparisons)
     assert win_rates["traj-a"] > win_rates["traj-b"] > win_rates["traj-c"]
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 6.  EvaluationHarness tests
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class TestEvaluationHarness:
@@ -820,9 +789,7 @@ class TestEvaluationHarness:
     self,
     harness: EvaluationHarness,
   ) -> None:
-    from llm_oracle.evaluation.harness import _oracle_gap
-
-    trajs = [
+    trajectory_list = [
       Trajectory("a", "t", "code a", reward=1.0),
       Trajectory("b", "t", "code b", reward=0.3),
     ]
@@ -835,36 +802,32 @@ class TestEvaluationHarness:
         "b": ScoreResult("b", 0.3),
       },
     )
-    gap = _oracle_gap("a", result, trajs)
+    gap = _oracle_gap("a", result, trajectory_list)
     assert gap == pytest.approx(0.0)
 
   def test_oracle_gap_nonzero_when_wrong_selection(self) -> None:
-    from llm_oracle.evaluation.harness import _oracle_gap
-
-    trajs = [
+    trajectory_list = [
       Trajectory("a", "t", "code a", reward=1.0),
       Trajectory("b", "t", "code b", reward=0.3),
     ]
     result = EvaluationResult(
       task_id="t",
       strategy_type=StrategyType.VERIFIER,
-      best_trajectory_id="b",  # selected wrong one
+      best_trajectory_id="b",
       trajectory_scores={
         "a": ScoreResult("a", 0.9),
         "b": ScoreResult("b", 0.3),
       },
     )
-    gap = _oracle_gap("a", result, trajs)  # oracle is "a", but "b" was selected
-    assert gap == pytest.approx(0.7)  # reward["a"] - reward["b"] = 1.0 - 0.3
+    gap = _oracle_gap("a", result, trajectory_list)
+    assert gap == pytest.approx(0.7)
 
   def test_pairwise_disagreement_full(self) -> None:
-    from llm_oracle.evaluation.harness import _pairwise_disagreement
-
-    trajs = [
+    trajectory_list = [
       Trajectory("a", "t", "code a"),
       Trajectory("b", "t", "code b"),
     ]
-    v_result = EvaluationResult(
+    verifier_result = EvaluationResult(
       task_id="t",
       strategy_type=StrategyType.VERIFIER,
       best_trajectory_id="a",
@@ -873,7 +836,7 @@ class TestEvaluationHarness:
         "b": ScoreResult("b", 0.1),
       },
     )
-    j_result = EvaluationResult(
+    judge_result = EvaluationResult(
       task_id="t",
       strategy_type=StrategyType.JUDGE,
       best_trajectory_id="b",
@@ -882,53 +845,54 @@ class TestEvaluationHarness:
         "b": ScoreResult("b", 0.9),
       },
     )
-    disagreement = _pairwise_disagreement(trajs, v_result, j_result)
+    disagreement = _pairwise_disagreement(trajectory_list, verifier_result, judge_result)
     assert disagreement == pytest.approx(1.0)
 
   def test_pairwise_disagreement_zero_when_agree(self) -> None:
-    from llm_oracle.evaluation.harness import _pairwise_disagreement
-
-    trajs = [Trajectory("a", "t", "c"), Trajectory("b", "t", "c")]
+    trajectory_list = [Trajectory("a", "t", "c"), Trajectory("b", "t", "c")]
     same_scores = {
       "a": ScoreResult("a", 0.8),
       "b": ScoreResult("b", 0.2),
     }
-    r1 = EvaluationResult("t", StrategyType.VERIFIER, "a", same_scores)
-    r2 = EvaluationResult("t", StrategyType.JUDGE, "a", dict(same_scores))
-    assert _pairwise_disagreement(trajs, r1, r2) == pytest.approx(0.0)
+    verifier_result = EvaluationResult("t", StrategyType.VERIFIER, "a", same_scores)
+    judge_result = EvaluationResult("t", StrategyType.JUDGE, "a", dict(same_scores))
+    assert _pairwise_disagreement(trajectory_list, verifier_result, judge_result) == pytest.approx(
+      0.0
+    )
 
   def test_inter_strategy_score_spread(self) -> None:
-    from llm_oracle.evaluation.harness import _inter_strategy_score_spread
-
-    # When strategies agree on every score, spread = 0 (easy to evaluate).
-    r_agree_v = EvaluationResult(
+    verifier_agree_result = EvaluationResult(
       "t",
       StrategyType.VERIFIER,
       "a",
       {"a": ScoreResult("a", 0.8), "b": ScoreResult("b", 0.2)},
     )
-    r_agree_j = EvaluationResult(
+    judge_agree_result = EvaluationResult(
       "t",
       StrategyType.JUDGE,
       "a",
       {"a": ScoreResult("a", 0.8), "b": ScoreResult("b", 0.2)},
     )
-    assert _inter_strategy_score_spread(r_agree_v, r_agree_j) == pytest.approx(0.0)
+    assert _inter_strategy_score_spread(verifier_agree_result, judge_agree_result) == pytest.approx(
+      0.0
+    )
 
-    # When strategies maximally disagree on every score, spread = 1 (hard).
-    r_disagree_v = EvaluationResult(
+    verifier_disagree_result = EvaluationResult(
       "t",
       StrategyType.VERIFIER,
       "a",
       {"a": ScoreResult("a", 1.0), "b": ScoreResult("b", 0.0)},
     )
-    r_disagree_j = EvaluationResult(
+    judge_disagree_result = EvaluationResult(
       "t",
       StrategyType.JUDGE,
       "b",
       {"a": ScoreResult("a", 0.0), "b": ScoreResult("b", 1.0)},
     )
-    assert _inter_strategy_score_spread(r_disagree_v, r_disagree_j) == pytest.approx(1.0)
+    assert _inter_strategy_score_spread(
+      verifier_disagree_result,
+      judge_disagree_result,
+    ) == pytest.approx(1.0)
 
   def test_report_summary_contains_key_sections(
     self,
@@ -965,8 +929,6 @@ class TestEvaluationHarness:
   def test_hardness_weights_validation(
     self, verifier: VerifierStrategy, judge: JudgeStrategy
   ) -> None:
-    from llm_oracle.evaluation.harness import _validate_hardness_weights
-
     with pytest.raises(ValueError, match="sum"):
       _validate_hardness_weights(
         {
@@ -981,30 +943,21 @@ class TestEvaluationHarness:
       _validate_hardness_weights({"score_spread": 1.0})
 
   def test_task_hardness_record_wins_properties(self) -> None:
-    from llm_oracle.evaluation.harness import TaskHardnessRecord
-
-    r = TaskHardnessRecord(
+    record = TaskHardnessRecord(
       task_id="t",
       oracle_gap_verifier=0.1,
       oracle_gap_judge=0.3,
     )
-    assert r.verifier_wins is True
-    assert r.judge_wins is False
+    assert record.verifier_wins is True
+    assert record.judge_wins is False
 
   def test_task_hardness_record_strategies_agree(self) -> None:
-    from llm_oracle.evaluation.harness import TaskHardnessRecord
-
-    r = TaskHardnessRecord(
+    record = TaskHardnessRecord(
       task_id="t",
       verifier_result=EvaluationResult("t", StrategyType.VERIFIER, "a", {}),
       judge_result=EvaluationResult("t", StrategyType.JUDGE, "a", {}),
     )
-    assert r.strategies_agree is True
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 7.  SignalExtractor tests
-# ──────────────────────────────────────────────────────────────────────────────
+    assert record.strategies_agree is True
 
 
 class TestSignalExtractor:
@@ -1045,15 +998,14 @@ class TestSignalExtractor:
   def test_output_available_when_present(
     self, extractor: SignalExtractor, easy_task: Task, trajectories: list[Trajectory]
   ) -> None:
-    # trajectories[0] has output="[1, 2, 3, 4]"
     signals = extractor.extract(easy_task, trajectories)
     assert signals.output_available == 1.0
 
   def test_output_unavailable_when_missing(
     self, extractor: SignalExtractor, easy_task: Task
   ) -> None:
-    trajs = [Trajectory("x", easy_task.id, "code")]  # no output
-    signals = extractor.extract(easy_task, trajs)
+    trajectory_list = [Trajectory("x", easy_task.id, "code")]
+    signals = extractor.extract(easy_task, trajectory_list)
     assert signals.output_available == 0.0
 
   def test_difficulty_encoding(
@@ -1104,11 +1056,6 @@ class TestSignalExtractor:
     assert 0.0 <= signals.problem_length <= 1.0
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 8.  Routing policy tests
-# ──────────────────────────────────────────────────────────────────────────────
-
-
 class TestRoutingPolicies:
   """Test each built-in routing policy in isolation."""
 
@@ -1119,8 +1066,6 @@ class TestRoutingPolicies:
   @pytest.fixture()
   def signals_no_ground_truth(self) -> RoutingSignals:
     return RoutingSignals(has_ground_truth=0.0, has_test_cases=0.0)
-
-  # ── GroundTruthPolicy ─────────────────────────────────────────────────────
 
   def test_ground_truth_policy_prefers_verifier_with_ref(
     self,
@@ -1146,8 +1091,6 @@ class TestRoutingPolicies:
   def test_ground_truth_policy_weight(self) -> None:
     assert GroundTruthPolicy().weight == 2.0
 
-  # ── KeywordDomainPolicy ───────────────────────────────────────────────────
-
   def test_keyword_domain_verifiable_task(
     self,
     code_task: Task,
@@ -1157,10 +1100,6 @@ class TestRoutingPolicies:
     signals = extractor.extract(code_task, trajectories)
     policy = KeywordDomainPolicy()
     vote = policy.vote(code_task, trajectories, signals)
-    # code_task has "implement", "search" etc. → should prefer verifier
-    # (or at least not strongly prefer judge)
-    # The test is lenient because the actual keyword density depends on
-    # the exact problem text.
     assert vote.preferred in {StrategyType.VERIFIER, StrategyType.JUDGE}
     assert 0.5 <= vote.confidence <= 1.0
 
@@ -1181,16 +1120,13 @@ class TestRoutingPolicies:
     easy_task: Task,
     trajectories: list[Trajectory],
   ) -> None:
-    # Flat signals: no keyword advantage either way
     signals = RoutingSignals(
       verifiable_keyword_density=0.1,
       judgement_keyword_density=0.1,
     )
     policy = KeywordDomainPolicy()
     vote = policy.vote(easy_task, trajectories, signals)
-    assert vote.confidence < 0.7  # low confidence on ambiguous input
-
-  # ── DifficultyPolicy ──────────────────────────────────────────────────────
+    assert vote.confidence < 0.7
 
   def test_difficulty_policy_easy_prefers_judge(
     self, easy_task: Task, trajectories: list[Trajectory]
@@ -1222,8 +1158,6 @@ class TestRoutingPolicies:
     vote = policy.vote(task, trajectories, signals)
     assert vote.confidence <= 0.65
 
-  # ── TrajectoryCountPolicy ─────────────────────────────────────────────────
-
   def test_trajectory_count_single_prefers_judge(
     self, easy_task: Task, trajectories: list[Trajectory]
   ) -> None:
@@ -1249,15 +1183,13 @@ class TestRoutingPolicies:
     vote = policy.vote(easy_task, many_trajs, signals)
     assert vote.preferred == StrategyType.JUDGE
 
-  # ── PriorHardnessPolicy ───────────────────────────────────────────────────
-
   def test_prior_hardness_none_abstains(
     self, easy_task: Task, trajectories: list[Trajectory]
   ) -> None:
     signals = RoutingSignals(prior_hardness=None)
     policy = PriorHardnessPolicy()
     vote = policy.vote(easy_task, trajectories, signals)
-    assert vote.confidence < 0.55  # near-abstain
+    assert vote.confidence < 0.55
 
   def test_prior_hardness_low_prefers_judge(
     self, easy_task: Task, trajectories: list[Trajectory]
@@ -1283,8 +1215,6 @@ class TestRoutingPolicies:
       or PriorHardnessPolicy().weight >= 1.5
     )
 
-  # ── OutputAvailabilityPolicy ──────────────────────────────────────────────
-
   def test_output_available_prefers_verifier(
     self, easy_task: Task, trajectories: list[Trajectory]
   ) -> None:
@@ -1301,8 +1231,6 @@ class TestRoutingPolicies:
     vote = policy.vote(easy_task, trajectories, signals)
     assert vote.preferred == StrategyType.JUDGE
 
-  # ── Policy vote dataclass ─────────────────────────────────────────────────
-
   def test_policy_vote_fields(self) -> None:
     vote = PolicyVote(
       policy_name="test",
@@ -1315,11 +1243,6 @@ class TestRoutingPolicies:
     assert vote.preferred == StrategyType.VERIFIER
     assert vote.confidence == pytest.approx(0.8)
     assert "has_ground_truth" in vote.signals_used
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 9.  PolicyChain tests
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class TestPolicyChain:
@@ -1382,7 +1305,6 @@ class TestPolicyChain:
   def test_fallback_when_below_threshold(
     self, easy_task: Task, trajectories: list[Trajectory]
   ) -> None:
-    # Mix equal-weight opposing votes to force low confidence
     class _AlwaysVerifier(RoutingPolicy):
       name = "always_v"
       weight = 1.0
@@ -1399,7 +1321,7 @@ class TestPolicyChain:
 
     chain = PolicyChain(
       [_AlwaysVerifier(), _AlwaysJudge()],
-      confidence_threshold=0.99,  # impossible to meet
+      confidence_threshold=0.99,
       fallback_strategy=StrategyType.JUDGE,
     )
     signals = RoutingSignals()
@@ -1410,7 +1332,7 @@ class TestPolicyChain:
   def test_policies_property_is_copy(self) -> None:
     chain = PolicyChain([GroundTruthPolicy()])
     policies = chain.policies
-    policies.append(DifficultyPolicy())  # should not mutate the chain
+    policies.append(DifficultyPolicy())
     assert len(chain.policies) == 1
 
   def test_reasoning_mentions_all_policies(
@@ -1426,20 +1348,15 @@ class TestPolicyChain:
     assert "prior_hardness" in reasoning
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 10.  OracleRouter tests
-# ──────────────────────────────────────────────────────────────────────────────
-
-
 class TestOracleRouter:
   def test_default_factory(self, verifier: VerifierStrategy, judge: JudgeStrategy) -> None:
-    r = OracleRouter.default(verifier, judge)
-    assert isinstance(r, OracleRouter)
-    assert len(r._chain.policies) >= 5
+    router = OracleRouter.default(verifier, judge)
+    assert isinstance(router, OracleRouter)
+    assert len(router._chain.policies) >= 5
 
   def test_verifier_only_factory(self, verifier: VerifierStrategy, judge: JudgeStrategy) -> None:
-    r = OracleRouter.verifier_only(verifier, judge)
-    decision = r.route(
+    router = OracleRouter.verifier_only(verifier, judge)
+    decision = router.route(
       Task("t", "d", "p"),
       [Trajectory("x", "t", "code")],
     )
@@ -1447,8 +1364,8 @@ class TestOracleRouter:
     assert decision.confidence == pytest.approx(1.0)
 
   def test_judge_only_factory(self, verifier: VerifierStrategy, judge: JudgeStrategy) -> None:
-    r = OracleRouter.judge_only(verifier, judge)
-    decision = r.route(
+    router = OracleRouter.judge_only(verifier, judge)
+    decision = router.route(
       Task("t", "d", "p"),
       [Trajectory("x", "t", "code")],
     )
@@ -1559,8 +1476,8 @@ class TestOracleRouter:
     assert len(router.decision_log) == 1
 
   def test_routing_summary_empty(self, verifier: VerifierStrategy, judge: JudgeStrategy) -> None:
-    r = OracleRouter.default(verifier, judge)
-    summary = r.routing_summary()
+    router = OracleRouter.default(verifier, judge)
+    summary = router.routing_summary()
     assert "No routing decisions" in summary
 
   def test_routing_summary_after_decisions(
@@ -1653,14 +1570,14 @@ class TestOracleRouter:
       ground_truth="def fn(): return 42",
       test_cases=[{"input": [], "expected": 42}],
     )
-    trajs = [
+    trajectory_list = [
       Trajectory("t1", "strong-v", "def fn(): return 42", output="42"),
       Trajectory("t2", "strong-v", "def fn(): return 0", output="0"),
       Trajectory("t3", "strong-v", "def fn(): return -1", output="-1"),
     ]
     router = OracleRouter.default(verifier, judge, confidence_threshold=0.45)
     router.update_hardness("strong-v", 0.9)
-    decision = router.route(strong_verifier_task, trajs)
+    decision = router.route(strong_verifier_task, trajectory_list)
     assert decision.selected_strategy == StrategyType.VERIFIER
 
   def test_router_routes_open_ended_task_to_judge(
@@ -1679,34 +1596,23 @@ class TestOracleRouter:
       ),
       difficulty=TaskDifficulty.EASY,
     )
-    trajs = [Trajectory("t1", "open-essay", "Paragraph 1 …")]
+    trajectory_list = [Trajectory("t1", "open-essay", "Paragraph 1 …")]
     router = OracleRouter.default(verifier, judge, confidence_threshold=0.45)
     router.update_hardness("open-essay", 0.15)
-    decision = router.route(open_task, trajs)
+    decision = router.route(open_task, trajectory_list)
     assert decision.selected_strategy == StrategyType.JUDGE
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 11.  Provider registry tests
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class TestProviderRegistry:
   def test_get_stub_provider(self) -> None:
-    from llm_oracle.core.providers import get_provider
-
     cls = get_provider("stub")
     assert cls is StubProvider
 
   def test_get_unknown_provider_raises(self) -> None:
-    from llm_oracle.core.providers import get_provider
-
     with pytest.raises(KeyError, match="Unknown provider"):
       get_provider("nonexistent_provider_xyz")
 
   def test_register_and_retrieve_custom_provider(self) -> None:
-    from llm_oracle.core.providers import get_provider, register_provider
-
     class MyCustomProvider(StubProvider):
       pass
 
@@ -1714,40 +1620,32 @@ class TestProviderRegistry:
     assert get_provider("my_custom") is MyCustomProvider
 
   def test_register_invalid_provider_raises(self) -> None:
-    from llm_oracle.core.providers import register_provider
-
     class BadProvider:
-      pass  # no generate method
+      pass
 
     with pytest.raises(TypeError):
       register_provider("bad", BadProvider)
 
   def test_create_provider_from_model_id_stub(self) -> None:
-    from llm_oracle.core.providers import create_provider
-
-    cfg = ModelConfig(model_id="stub", provider="stub")
-    provider = create_provider(cfg)
+    config = ModelConfig(model_id="stub", provider="stub")
+    provider = create_provider(config)
     assert isinstance(provider, StubProvider)
 
   def test_create_provider_from_model_id_unknown_raises(self) -> None:
-    from llm_oracle.core.providers import create_provider
-
-    cfg = ModelConfig(model_id="totally-unknown-model-xyz-123", provider="")
+    config = ModelConfig(model_id="totally-unknown-model-xyz-123", provider="")
     with pytest.raises(ValueError, match="Cannot infer provider"):
-      create_provider(cfg)
+      create_provider(config)
 
   def test_stub_provider_from_config(self) -> None:
-    cfg = ModelConfig(model_id="stub", provider="stub")
-    provider = StubProvider.from_config(cfg)
+    config = ModelConfig(model_id="stub", provider="stub")
+    provider = StubProvider.from_config(config)
     assert isinstance(provider, StubProvider)
     assert provider.model_id == "stub"
 
   def test_openai_provider_requires_package(self, monkeypatch) -> None:
     """OpenAIProvider should raise ImportError if 'openai' is not installed."""
-    import sys
-
     original = sys.modules.get("openai")
-    sys.modules["openai"] = None  # type: ignore[assignment]
+    sys.modules["openai"] = cast(Any, None)
     try:
       with pytest.raises((ImportError, TypeError)):
         OpenAIProvider(model_id="gpt-4o", api_key="fake")
@@ -1756,11 +1654,6 @@ class TestProviderRegistry:
         sys.modules.pop("openai", None)
       else:
         sys.modules["openai"] = original
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 12.  Integration smoke tests
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 class TestIntegration:
@@ -1810,7 +1703,6 @@ class TestIntegration:
     harness = EvaluationHarness(verifier=verifier, judge=judge)
     router = OracleRouter.default(verifier, judge)
 
-    # Run harness on both tasks
     report = harness.run(
       [
         (easy_task, trajectories),
@@ -1819,17 +1711,14 @@ class TestIntegration:
       parallel=False,
     )
 
-    # Feed hardness scores back into router
     for record in report.task_records:
       router.update_hardness(record.task_id, record.hardness_score)
 
-    # Now route each task again — the prior hardness signal is populated
     easy_decision = router.route(easy_task, trajectories)
     hard_decision = router.route(hard_task, trajectories)
 
     assert easy_decision.signals.prior_hardness is not None
     assert hard_decision.signals.prior_hardness is not None
-    # Routing decisions should be valid strategy types
     assert easy_decision.selected_strategy in {StrategyType.VERIFIER, StrategyType.JUDGE}
     assert hard_decision.selected_strategy in {StrategyType.VERIFIER, StrategyType.JUDGE}
 
@@ -1854,18 +1743,16 @@ class TestIntegration:
     easy_task: Task,
     trajectories: list[Trajectory],
   ) -> None:
-    v_result = verifier.evaluate(easy_task, trajectories)
-    j_result = judge.evaluate(easy_task, trajectories)
+    verifier_result = verifier.evaluate(easy_task, trajectories)
+    judge_result = judge.evaluate(easy_task, trajectories)
 
-    # Both should produce valid results for the same task
-    assert v_result.task_id == j_result.task_id == easy_task.id
-    assert v_result.strategy_type != j_result.strategy_type
-    assert v_result.best_trajectory_id in {t.id for t in trajectories}
-    assert j_result.best_trajectory_id in {t.id for t in trajectories}
+    assert verifier_result.task_id == judge_result.task_id == easy_task.id
+    assert verifier_result.strategy_type != judge_result.strategy_type
+    assert verifier_result.best_trajectory_id in {t.id for t in trajectories}
+    assert judge_result.best_trajectory_id in {t.id for t in trajectories}
 
-    # Both should score all trajectories
-    assert set(v_result.trajectory_scores.keys()) == {t.id for t in trajectories}
-    assert set(j_result.trajectory_scores.keys()) == {t.id for t in trajectories}
+    assert set(verifier_result.trajectory_scores.keys()) == {t.id for t in trajectories}
+    assert set(judge_result.trajectory_scores.keys()) == {t.id for t in trajectories}
 
   def test_policy_chain_custom_policy(
     self,
@@ -1878,7 +1765,7 @@ class TestIntegration:
 
     class _AlwaysVerifierPolicy(RoutingPolicy):
       name = "always_verifier_custom"
-      weight = 100.0  # overwhelming weight
+      weight = 100.0
 
       def vote(self, task, trajectories, signals):
         return PolicyVote(
@@ -1891,5 +1778,4 @@ class TestIntegration:
     router = OracleRouter.default(verifier, judge, confidence_threshold=0.4)
     router.register_policy(_AlwaysVerifierPolicy())
     decision = router.route(easy_task, trajectories)
-    # The overwhelming custom policy should dominate
     assert decision.selected_strategy == StrategyType.VERIFIER

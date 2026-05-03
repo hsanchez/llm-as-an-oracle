@@ -1,0 +1,8 @@
+[[repos]]
+repo = "local"
+hooks = [
+  { id = "ruff-format", name = "ruff format", language = "system", entry = "uv run ruff format --check src tests", pass_filenames = false },
+  { id = "ruff-check", name = "ruff check", language = "system", entry = "uv run ruff check src tests", pass_filenames = false },
+  { id = "ty", name = "ty", language = "system", entry = "uv run ty check", pass_filenames = false },
+  { id = "pytest", name = "pytest", language = "system", entry = "uv run pytest", pass_filenames = false },
+]

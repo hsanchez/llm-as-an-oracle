@@ -1,7 +1,5 @@
 """Abstract base class for LLM evaluation strategies."""
 
-from __future__ import annotations
-
 import abc
 from typing import Any, Protocol
 
@@ -127,11 +125,13 @@ class BaseStrategy(abc.ABC):
       raise ValueError("Cannot select from empty trajectory list")
 
     if not scores:
-      # If no scores available, return first trajectory
       return trajectories[0].id
 
-    best_id = max(scores.keys(), key=lambda tid: scores[tid].score)
-    return best_id
+    best_trajectory_id = max(
+      scores.keys(),
+      key=lambda trajectory_id: scores[trajectory_id].score,
+    )
+    return best_trajectory_id
 
   def aggregate_criterion_scores(
     self,
@@ -141,14 +141,13 @@ class BaseStrategy(abc.ABC):
     if not criterion_scores:
       return 0.5
 
-    # Map criterion IDs to their weights
     criterion_weights = {c.id: c.weight for c in self.criteria}
 
     total_weight = 0.0
     weighted_sum = 0.0
 
-    for crit_id, score in criterion_scores.items():
-      weight = criterion_weights.get(crit_id, 1.0)
+    for criterion_id, score in criterion_scores.items():
+      weight = criterion_weights.get(criterion_id, 1.0)
       weighted_sum += score * weight
       total_weight += weight
 
@@ -156,33 +155,32 @@ class BaseStrategy(abc.ABC):
 
   def get_scale_description(self) -> dict[str, Any]:
     """Return scale levels and valid score tokens for the current granularity."""
-    g = self.config.granularity
+    granularity = self.config.granularity
 
-    # Generate letter-based scale (A-Z for up to 26 levels)
-    if g <= 26:
+    # A–Z supports at most 26 levels
+    if granularity <= 26:
       valid_tokens = {}
-      for i in range(g):
-        letter = chr(65 + i)  # A, B, C, ...
-        score_value = float(g - i)
+      for index in range(granularity):
+        letter = chr(65 + index)
+        score_value = float(granularity - index)
         valid_tokens[letter] = score_value
         valid_tokens[letter.lower()] = score_value
 
-      scale_desc = self._generate_scale_description(g)
+      scale_description = self._generate_scale_description(granularity)
 
       return {
-        "scale_description": scale_desc,
-        "score_format": f"LETTER_A_TO_{chr(65 + g - 1)}",
+        "scale_description": scale_description,
+        "score_format": f"LETTER_A_TO_{chr(65 + granularity - 1)}",
         "valid_tokens": valid_tokens,
-        "granularity": g,
+        "granularity": granularity,
       }
-    else:
-      # For granularity > 26, use numeric scale
-      return {
-        "scale_description": f"Rate on a scale from 1 to {g}",
-        "score_format": f"NUMBER_1_TO_{g}",
-        "valid_tokens": {str(i): float(i) for i in range(1, g + 1)},
-        "granularity": g,
-      }
+
+    return {
+      "scale_description": f"Rate on a scale from 1 to {granularity}",
+      "score_format": f"NUMBER_1_TO_{granularity}",
+      "valid_tokens": {str(i): float(i) for i in range(1, granularity + 1)},
+      "granularity": granularity,
+    }
 
   def _generate_scale_description(self, granularity: int) -> str:
     if granularity == 20:

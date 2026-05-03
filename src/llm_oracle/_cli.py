@@ -1,10 +1,10 @@
 """LLM Oracle CLI implementation."""
 
-from __future__ import annotations
-
 import argparse
 import sys
 import textwrap
+
+import llm_oracle as oracle
 
 
 def _banner(title: str, width: int = 68) -> None:
@@ -32,18 +32,8 @@ def _err(msg: str) -> None:
 
 
 def _import_oracle():
-  """Import llm_oracle, printing a helpful message on failure."""
-  try:
-    import llm_oracle  # noqa: PLC0415
-
-    return llm_oracle
-  except ImportError:
-    _err("Could not import 'llm_oracle'.")
-    _err(
-      "Make sure you are running from the project root and that the package is on your Python path."
-    )
-    _err("Try:  uv run python -m llm_oracle <command>")
-    sys.exit(1)
+  """Return the package API namespace."""
+  return oracle
 
 
 def cmd_info(_args: argparse.Namespace) -> None:
@@ -98,7 +88,7 @@ def cmd_route(args: argparse.Namespace) -> None:
     (args.difficulty or "unknown").lower(), oracle.TaskDifficulty.UNKNOWN
   )
 
-  n_trajs: int = max(1, int(args.trajectories or 2))
+  trajectory_count: int = max(1, int(args.trajectories or 2))
 
   _banner("LLM Oracle — Routing Decision")
 
@@ -111,14 +101,14 @@ def cmd_route(args: argparse.Namespace) -> None:
     test_cases=[{"example": True}] if args.test_cases else None,
   )
 
-  trajs = [
+  trajectories = [
     oracle.Trajectory(
       id=f"traj-{i + 1}",
       task_id="cli-task",
       content=f"[Placeholder trajectory {i + 1} for: {task_text[:40]}…]",
       output="[output]" if args.with_output else None,
     )
-    for i in range(n_trajs)
+    for i in range(trajectory_count)
   ]
 
   stub = oracle.StubProvider()
@@ -136,12 +126,12 @@ def cmd_route(args: argparse.Namespace) -> None:
     router.update_hardness("cli-task", hardness)
     _info(f"Injected prior hardness : {hardness:.3f}")
 
-  decision = router.route(task, trajs)
+  decision = router.route(task, trajectories)
 
   _section("Task")
   _info(f"Text       : {task_text[:70]}{'…' if len(task_text) > 70 else ''}")
   _info(f"Difficulty : {difficulty.value}")
-  _info(f"Trajectories : {n_trajs}")
+  _info(f"Trajectories : {trajectory_count}")
   _info(f"Ground truth : {'yes' if task.ground_truth else 'no'}")
   _info(f"Test cases   : {'yes' if task.test_cases else 'no'}")
   _info(f"With output  : {'yes' if args.with_output else 'no'}")
@@ -166,12 +156,15 @@ def cmd_route(args: argparse.Namespace) -> None:
       ("output_available", signals.output_available),
       ("prior_hardness", signals.prior_hardness),
     ]
-    for k, v in rows:
-      val_str = f"{v:.4f}" if isinstance(v, float) else str(v)
-      _info(f"  {k:<35s} : {val_str}")
+    for key, value in rows:
+      value_text = f"{value:.4f}" if isinstance(value, float) else str(value)
+      _info(f"  {key:<35s} : {value_text}")
 
   _section("Policy Votes")
-  for vote in sorted(decision.policy_votes, key=lambda v: -v.confidence * v.weight):
+  for vote in sorted(
+    decision.policy_votes,
+    key=lambda policy_vote: -policy_vote.confidence * policy_vote.weight,
+  ):
     arrow = "→" if vote.preferred == decision.selected_strategy else "←"
     _info(
       f"  {arrow} [{vote.policy_name:<26s}]  "
@@ -190,7 +183,7 @@ def cmd_compare(args: argparse.Namespace) -> None:
   oracle = _import_oracle()
 
   task_text: str = args.task
-  n_trajs: int = max(1, int(args.trajectories or 2))
+  trajectory_count: int = max(1, int(args.trajectories or 2))
 
   _banner("LLM Oracle — Verifier vs Judge Comparison")
 
@@ -200,14 +193,14 @@ def cmd_compare(args: argparse.Namespace) -> None:
     problem_statement=task_text,
     difficulty=oracle.TaskDifficulty.MEDIUM,
   )
-  trajs = [
+  trajectories = [
     oracle.Trajectory(
       id=f"traj-{i + 1}",
       task_id="compare-task",
       content=f"[Candidate solution {i + 1}]",
       reward=1.0 if i == 0 else 0.0,
     )
-    for i in range(n_trajs)
+    for i in range(trajectory_count)
   ]
 
   stub = oracle.StubProvider(seed=7)
@@ -221,26 +214,38 @@ def cmd_compare(args: argparse.Namespace) -> None:
   harness = oracle.EvaluationHarness(verifier=verifier, judge=judge)
 
   _info(f"Task         : {task_text[:70]}")
-  _info(f"Trajectories : {n_trajs}")
+  _info(f"Trajectories : {trajectory_count}")
   _info("Running harness …")
 
-  record = harness.run_single(task, trajs)
+  record = harness.run_single(task, trajectories)
 
   _section("Verifier Result")
   if record.verifier_result:
-    vr = record.verifier_result
-    _info(f"Best trajectory : {vr.best_trajectory_id}")
+    verifier_result = record.verifier_result
+    _info(f"Best trajectory : {verifier_result.best_trajectory_id}")
     _info("Scores:")
-    for tid, sr in sorted(vr.trajectory_scores.items(), key=lambda x: -x[1].score):
-      _info(f"  {tid:<12s}  overall={sr.score:.4f}  confidence={sr.confidence:.4f}")
+    for trajectory_id, score_result in sorted(
+      verifier_result.trajectory_scores.items(),
+      key=lambda item: -item[1].score,
+    ):
+      _info(
+        f"  {trajectory_id:<12s}  overall={score_result.score:.4f}  "
+        f"confidence={score_result.confidence:.4f}"
+      )
 
   _section("Judge Result")
   if record.judge_result:
-    jr = record.judge_result
-    _info(f"Best trajectory : {jr.best_trajectory_id}")
+    judge_result = record.judge_result
+    _info(f"Best trajectory : {judge_result.best_trajectory_id}")
     _info("Scores:")
-    for tid, sr in sorted(jr.trajectory_scores.items(), key=lambda x: -x[1].score):
-      _info(f"  {tid:<12s}  overall={sr.score:.4f}  confidence={sr.confidence:.4f}")
+    for trajectory_id, score_result in sorted(
+      judge_result.trajectory_scores.items(),
+      key=lambda item: -item[1].score,
+    ):
+      _info(
+        f"  {trajectory_id:<12s}  overall={score_result.score:.4f}  "
+        f"confidence={score_result.confidence:.4f}"
+      )
 
   _section("Hardness Metrics")
   _info(f"Composite hardness score   : {record.hardness_score:.4f}")

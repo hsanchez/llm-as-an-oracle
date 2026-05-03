@@ -1,7 +1,5 @@
 """LLM-as-a-Verifier strategy: fine-grained log-probability scoring with pairwise tournament."""
 
-from __future__ import annotations
-
 import math
 import re
 from itertools import combinations
@@ -65,7 +63,6 @@ class VerifierStrategy(BaseStrategy):
       raise ValueError("Cannot evaluate empty trajectory list")
 
     if len(trajectories) == 1:
-      # Single trajectory - just score it
       trajectory = trajectories[0]
       score_result = self._score_trajectory_multi_criterion(task, trajectory)
       return EvaluationResult(
@@ -76,19 +73,21 @@ class VerifierStrategy(BaseStrategy):
         pairwise_comparisons=[],
       )
 
-    # Multiple trajectories - use pairwise tournament
-    pairwise_comparisons = []
-    trajectory_scores = {}
+    pairwise_comparisons: list[PairwiseComparison] = []
+    trajectory_scores: dict[str, ScoreResult] = {}
 
-    # Perform all pairwise comparisons
-    for traj_a, traj_b in combinations(trajectories, 2):
+    for trajectory_a, trajectory_b in combinations(trajectories, 2):
       for criterion in self.criteria:
-        # Perform K repeated verifications per criterion
-        for rep in range(self.config.num_verifications):
-          comparison = self.compare_trajectories(task, traj_a, traj_b, criterion, repetition=rep)
+        for repetition in range(self.config.num_verifications):
+          comparison = self.compare_trajectories(
+            task,
+            trajectory_a,
+            trajectory_b,
+            criterion,
+            repetition=repetition,
+          )
           pairwise_comparisons.append(comparison)
 
-    # Aggregate scores for each trajectory
     for trajectory in trajectories:
       criterion_scores = self._aggregate_trajectory_scores(trajectory.id, pairwise_comparisons)
       overall_score = self.aggregate_criterion_scores(criterion_scores)
@@ -99,13 +98,12 @@ class VerifierStrategy(BaseStrategy):
         confidence=self._compute_confidence(criterion_scores),
       )
 
-    # Select best via tournament
-    best_id = self._tournament_selection(trajectories, pairwise_comparisons)
+    best_trajectory_id = self._tournament_selection(trajectories, pairwise_comparisons)
 
     return EvaluationResult(
       task_id=task.id,
       strategy_type=self.get_strategy_type(),
-      best_trajectory_id=best_id,
+      best_trajectory_id=best_trajectory_id,
       trajectory_scores=trajectory_scores,
       pairwise_comparisons=pairwise_comparisons,
       metadata={
@@ -209,7 +207,7 @@ class VerifierStrategy(BaseStrategy):
         criterion_scores[criterion.id].append(result.score)
 
     avg_criterion_scores = {
-      cid: sum(scores) / len(scores) for cid, scores in criterion_scores.items()
+      criterion_id: sum(scores) / len(scores) for criterion_id, scores in criterion_scores.items()
     }
 
     overall_score = self.aggregate_criterion_scores(avg_criterion_scores)
@@ -236,8 +234,8 @@ class VerifierStrategy(BaseStrategy):
     test_cases_block = ""
     if task.test_cases:
       cases_text = "\n".join(
-        f"  Input: {c.get('input', '')!r} → Expected: {c.get('expected', '')!r}"
-        for c in task.test_cases
+        f"  Input: {test_case.get('input', '')!r} → Expected: {test_case.get('expected', '')!r}"
+        for test_case in task.test_cases
       )
       test_cases_block = f"\n**Test Cases:**\n{cases_text}\n"
 
@@ -288,8 +286,8 @@ Begin your evaluation now."""
     test_cases_block = ""
     if task.test_cases:
       cases_text = "\n".join(
-        f"  Input: {c.get('input', '')!r} → Expected: {c.get('expected', '')!r}"
-        for c in task.test_cases
+        f"  Input: {test_case.get('input', '')!r} → Expected: {test_case.get('expected', '')!r}"
+        for test_case in task.test_cases
       )
       test_cases_block = f"\n**Test Cases:**\n{cases_text}\n"
 
@@ -344,7 +342,6 @@ Begin your analysis now."""
     """Extract ``(raw_score, confidence)`` from logprobs at the given XML tag."""
     valid_tokens = self._scale_info["valid_tokens"]
 
-    # Try to extract from log probabilities first
     if tokens and position_logprobs and self.config.use_logprobs:
       tag_logprobs = self._find_tag_logprobs(tokens, position_logprobs, tag)
 
@@ -354,40 +351,35 @@ Begin your analysis now."""
         for tok_str, logprob in tag_logprobs:
           tok = tok_str.strip()
           if tok in valid_tokens:
-            val = valid_tokens[tok]
+            raw_value = valid_tokens[tok]
             p = math.exp(logprob)
-            probs[val] = max(probs.get(val, 0.0), p)
+            probs[raw_value] = max(probs.get(raw_value, 0.0), p)
 
         if probs:
-          # Compute expected value from probability distribution
           total_p = sum(probs.values())
           expected = sum(v * p for v, p in probs.items()) / total_p
 
-          # Confidence is the probability mass on the top choice
           confidence = max(probs.values()) / total_p if total_p > 0 else 0.5
 
           return expected, confidence
 
-    # Fallback: parse from text
     tag_name = tag.strip("<>")
     pattern = rf"<{re.escape(tag_name)}>\s*(.+?)\s*</{re.escape(tag_name)}>"
     match = re.search(pattern, text or "", re.IGNORECASE)
 
     if match:
       tok = match.group(1).strip()
-      raw_val = valid_tokens.get(tok)
+      raw_value = valid_tokens.get(tok)
 
-      if raw_val is None:
-        # Try case-insensitive match
-        for vt, val in valid_tokens.items():
-          if tok.lower() == vt.lower():
-            raw_val = val
+      if raw_value is None:
+        for valid_token, candidate_value in valid_tokens.items():
+          if tok.lower() == valid_token.lower():
+            raw_value = candidate_value
             break
 
-      if raw_val is not None:
-        return raw_val, 0.8  # Moderate confidence for text extraction
+      if raw_value is not None:
+        return raw_value, 0.8
 
-    # Default to middle of scale
     return float(self.config.granularity) / 2.0, 0.5
 
   def _find_tag_logprobs(
@@ -404,7 +396,6 @@ Begin your analysis now."""
     for i, tok in enumerate(tokens):
       text_so_far += tok
       if text_so_far.rstrip().endswith(tag):
-        # Return logprobs for next position
         if i + 1 < len(position_logprobs):
           return position_logprobs[i + 1]
 
@@ -418,21 +409,23 @@ Begin your analysis now."""
     """Return per-criterion mean scores for a trajectory from all comparisons."""
     criterion_scores: dict[str, list[float]] = {}
 
-    for comp in comparisons:
-      if comp.criterion_id is None:
+    for comparison in comparisons:
+      if comparison.criterion_id is None:
         continue
 
-      if comp.criterion_id not in criterion_scores:
-        criterion_scores[comp.criterion_id] = []
+      if comparison.criterion_id not in criterion_scores:
+        criterion_scores[comparison.criterion_id] = []
 
-      # Add this trajectory's score from the comparison
-      if comp.trajectory_a_id == trajectory_id:
-        criterion_scores[comp.criterion_id].append(comp.score_a)
-      elif comp.trajectory_b_id == trajectory_id:
-        criterion_scores[comp.criterion_id].append(comp.score_b)
+      if comparison.trajectory_a_id == trajectory_id:
+        criterion_scores[comparison.criterion_id].append(comparison.score_a)
+      elif comparison.trajectory_b_id == trajectory_id:
+        criterion_scores[comparison.criterion_id].append(comparison.score_b)
 
-    # Average scores for each criterion
-    return {cid: sum(scores) / len(scores) for cid, scores in criterion_scores.items() if scores}
+    return {
+      criterion_id: sum(scores) / len(scores)
+      for criterion_id, scores in criterion_scores.items()
+      if scores
+    }
 
   def _tournament_selection(
     self,
@@ -440,36 +433,35 @@ Begin your analysis now."""
     comparisons: list[PairwiseComparison],
   ) -> str:
     """Return the ID of the trajectory with the most round-robin wins."""
-    # Count wins for each trajectory
     wins: dict[str, float] = {t.id: 0.0 for t in trajectories}
 
-    # Group comparisons by trajectory pair and criterion
     comparison_map: dict[tuple[str, str, str], list[PairwiseComparison]] = {}
 
-    for comp in comparisons:
-      key = (comp.trajectory_a_id, comp.trajectory_b_id, comp.criterion_id or "")
+    for comparison in comparisons:
+      key = (
+        comparison.trajectory_a_id,
+        comparison.trajectory_b_id,
+        comparison.criterion_id or "",
+      )
       if key not in comparison_map:
         comparison_map[key] = []
-      comparison_map[key].append(comp)
+      comparison_map[key].append(comparison)
 
-    # For each unique pair+criterion, aggregate scores and award wins
-    for key, comps in comparison_map.items():
-      tid_a, tid_b, _ = key
+    for key, pairwise_comparisons in comparison_map.items():
+      trajectory_a_id, trajectory_b_id, _ = key
 
-      # Average scores across repetitions
-      avg_score_a = sum(c.score_a for c in comps) / len(comps)
-      avg_score_b = sum(c.score_b for c in comps) / len(comps)
+      avg_score_a = sum(c.score_a for c in pairwise_comparisons) / len(pairwise_comparisons)
+      avg_score_b = sum(c.score_b for c in pairwise_comparisons) / len(pairwise_comparisons)
 
       if avg_score_a > avg_score_b:
-        wins[tid_a] += 1.0
+        wins[trajectory_a_id] += 1.0
       elif avg_score_b > avg_score_a:
-        wins[tid_b] += 1.0
+        wins[trajectory_b_id] += 1.0
       else:
-        wins[tid_a] += 0.5
-        wins[tid_b] += 0.5
+        wins[trajectory_a_id] += 0.5
+        wins[trajectory_b_id] += 0.5
 
-    # Return trajectory with most wins
-    return max(wins.keys(), key=lambda tid: wins[tid])
+    return max(wins.keys(), key=lambda trajectory_id: wins[trajectory_id])
 
   def _compute_confidence(self, criterion_scores: dict[str, float]) -> float:
     """Compute confidence from score variance across criteria (low variance = high confidence)."""
@@ -478,14 +470,11 @@ Begin your analysis now."""
 
     scores = list(criterion_scores.values())
     if len(scores) == 1:
-      return 0.9  # High confidence with single criterion
+      return 0.9
 
-    # Lower variance = higher confidence
     mean = sum(scores) / len(scores)
     variance = sum((s - mean) ** 2 for s in scores) / len(scores)
 
-    # Convert variance to confidence (inverse relationship)
-    # Variance ranges from 0 (all same) to 0.25 (max spread in [0,1])
     confidence = 1.0 - min(variance * 4.0, 1.0)
 
-    return max(0.5, confidence)  # Minimum 50% confidence
+    return max(0.5, confidence)

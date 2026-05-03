@@ -4,8 +4,6 @@ Policies are deterministic and O(1); each casts a soft vote aggregated by a
 PolicyChain. Every decision is fully auditable via DetailedRoutingDecision.
 """
 
-from __future__ import annotations
-
 import abc
 import re
 import time
@@ -21,10 +19,8 @@ from llm_oracle.core.models import (
 )
 from llm_oracle.core.strategy import BaseStrategy
 
-# Minimum confidence required to commit to a strategy without fallback.
 _CONFIDENCE_THRESHOLD: float = 0.60
 
-# Keywords that strongly suggest a verifiable / executable task.
 _VERIFIABLE_KEYWORDS: frozenset[str] = frozenset(
   {
     "implement",
@@ -34,7 +30,6 @@ _VERIFIABLE_KEYWORDS: frozenset[str] = frozenset(
     "bug",
     "fix",
     "test",
-    "unit test",
     "assert",
     "output",
     "return",
@@ -57,7 +52,6 @@ _VERIFIABLE_KEYWORDS: frozenset[str] = frozenset(
   }
 )
 
-# Keywords that suggest an open-ended / creative task better suited to a judge.
 _JUDGEMENT_KEYWORDS: frozenset[str] = frozenset(
   {
     "explain",
@@ -88,9 +82,6 @@ _JUDGEMENT_KEYWORDS: frozenset[str] = frozenset(
 )
 
 
-# Signal types
-
-
 @dataclass(frozen=True)
 class RoutingSignals:
   """Named feature signals extracted from a task for routing decisions.
@@ -116,7 +107,8 @@ class PolicyVote:
   """A single policy's routing vote.
 
   PolicyChain aggregates as ``sum(confidence * weight)`` per strategy.
-  Votes below ``confidence_threshold`` are treated as abstentions.
+  All votes contribute to the weighted totals; the threshold gates whether the
+  winning strategy is accepted or falls back to the default.
   """
 
   policy_name: str
@@ -127,9 +119,6 @@ class PolicyVote:
   reasoning: str = ""
 
 
-# Base policy
-
-
 class RoutingPolicy(abc.ABC):
   """Abstract base for all routing policies.
 
@@ -137,10 +126,7 @@ class RoutingPolicy(abc.ABC):
   its trajectories) and casts a soft vote for a strategy.
   """
 
-  #: Human-readable name used in audit logs and ``PolicyVote``.
   name: str = "unnamed_policy"
-
-  #: Relative weight when combined in a :class:`PolicyChain`.
   weight: float = 1.0
 
   @abc.abstractmethod
@@ -154,9 +140,6 @@ class RoutingPolicy(abc.ABC):
 
   def __repr__(self) -> str:
     return f"{self.__class__.__name__}(name={self.name!r}, weight={self.weight})"
-
-
-# Built-in routing policies
 
 
 class GroundTruthPolicy(RoutingPolicy):
@@ -251,7 +234,6 @@ class KeywordDomainPolicy(RoutingPolicy):
         ),
       )
 
-    # Ambiguous — weak judge preference as the safer default
     return PolicyVote(
       policy_name=self.name,
       preferred=StrategyType.JUDGE,
@@ -304,7 +286,6 @@ class DifficultyPolicy(RoutingPolicy):
         ),
       )
 
-    # MEDIUM or UNKNOWN
     return PolicyVote(
       policy_name=self.name,
       preferred=StrategyType.VERIFIER,
@@ -337,9 +318,9 @@ class TrajectoryCountPolicy(RoutingPolicy):
     trajectories: TrajectoryList,
     signals: RoutingSignals,
   ) -> PolicyVote:
-    n = signals.trajectory_count
+    trajectory_count = signals.trajectory_count
 
-    if n == 1:
+    if trajectory_count == 1:
       return PolicyVote(
         policy_name=self.name,
         preferred=StrategyType.JUDGE,
@@ -352,7 +333,7 @@ class TrajectoryCountPolicy(RoutingPolicy):
         ),
       )
 
-    if 2 <= n <= 4:
+    if 2 <= trajectory_count <= 4:
       return PolicyVote(
         policy_name=self.name,
         preferred=StrategyType.VERIFIER,
@@ -360,12 +341,11 @@ class TrajectoryCountPolicy(RoutingPolicy):
         weight=self.weight,
         signals_used=["trajectory_count"],
         reasoning=(
-          f"{n} trajectories available; verifier's pairwise tournament "
+          f"{trajectory_count} trajectories available; verifier's pairwise tournament "
           "can effectively discriminate between them."
         ),
       )
 
-    # n >= 5: tournament becomes quadratic; prefer judge
     return PolicyVote(
       policy_name=self.name,
       preferred=StrategyType.JUDGE,
@@ -373,7 +353,8 @@ class TrajectoryCountPolicy(RoutingPolicy):
       weight=self.weight,
       signals_used=["trajectory_count"],
       reasoning=(
-        f"{n} trajectories would require {n * (n - 1) // 2} pairwise calls "
+        f"{trajectory_count} trajectories would require "
+        f"{trajectory_count * (trajectory_count - 1) // 2} pairwise calls "
         "in the verifier; routing to judge for efficiency."
       ),
     )
@@ -391,7 +372,7 @@ class PriorHardnessPolicy(RoutingPolicy):
   """
 
   name = "prior_hardness"
-  weight = 1.8  # Second-highest weight after GroundTruthPolicy (2.0).
+  weight = 1.8
 
   def vote(
     self,
@@ -402,7 +383,6 @@ class PriorHardnessPolicy(RoutingPolicy):
     hardness = signals.prior_hardness
 
     if hardness is None:
-      # No prior data — abstain with a very weak judge preference.
       return PolicyVote(
         policy_name=self.name,
         preferred=StrategyType.JUDGE,
@@ -439,7 +419,6 @@ class PriorHardnessPolicy(RoutingPolicy):
         ),
       )
 
-    # Mid-range hardness
     return PolicyVote(
       policy_name=self.name,
       preferred=StrategyType.VERIFIER,
@@ -491,9 +470,6 @@ class OutputAvailabilityPolicy(RoutingPolicy):
     )
 
 
-# Policy chain
-
-
 class PolicyChain:
   """Aggregates votes from multiple RoutingPolicy instances.
 
@@ -514,8 +490,6 @@ class PolicyChain:
     self._threshold = confidence_threshold
     self._fallback = fallback_strategy
 
-  # Public API
-
   def decide(
     self,
     task: Task,
@@ -533,7 +507,6 @@ class PolicyChain:
     if total < 1e-9:
       return self._fallback, 0.5, votes, "All policies abstained; using fallback."
 
-    # Normalised confidence for the winning side.
     if verifier_score >= judge_score:
       winner = StrategyType.VERIFIER
       confidence = verifier_score / total
@@ -565,8 +538,6 @@ class PolicyChain:
   def fallback(self) -> StrategyType:
     """Strategy returned when confidence is below the threshold."""
     return self._fallback
-
-  # Private helpers
 
   @staticmethod
   def _aggregate(votes: list[PolicyVote]) -> tuple[float, float]:
@@ -600,9 +571,6 @@ class PolicyChain:
         f"{v.reasoning}"
       )
     return "\n".join(lines)
-
-
-# Signal extractor
 
 
 class SignalExtractor:
@@ -652,9 +620,6 @@ class SignalExtractor:
     )
 
 
-# Extended routing decision
-
-
 @dataclass
 class DetailedRoutingDecision(RoutingDecision):
   """RoutingDecision extended with per-policy votes, signals, and latency."""
@@ -662,9 +627,6 @@ class DetailedRoutingDecision(RoutingDecision):
   policy_votes: list[PolicyVote] = field(default_factory=list)
   signals: RoutingSignals = field(default_factory=RoutingSignals)
   elapsed_ms: float = 0.0
-
-
-# Main router
 
 
 class OracleRouter:
@@ -685,8 +647,6 @@ class OracleRouter:
     self._hardness_cache: dict[str, float] = hardness_cache or {}
     self._decision_log: list[DetailedRoutingDecision] = []
 
-  # Factory constructors
-
   @classmethod
   def default(
     cls,
@@ -695,7 +655,7 @@ class OracleRouter:
     *,
     hardness_cache: dict[str, float] | None = None,
     confidence_threshold: float = _CONFIDENCE_THRESHOLD,
-  ) -> OracleRouter:
+  ) -> "OracleRouter":
     """Create a router with the default six-policy chain.
 
     Policy weights: prior_hardness(1.8), ground_truth(2.0),
@@ -722,7 +682,7 @@ class OracleRouter:
     cls,
     verifier: BaseStrategy,
     judge: BaseStrategy,
-  ) -> OracleRouter:
+  ) -> "OracleRouter":
     """Create a router that always selects the verifier (ablation mode)."""
 
     class _AlwaysVerifierPolicy(RoutingPolicy):
@@ -744,7 +704,7 @@ class OracleRouter:
     cls,
     verifier: BaseStrategy,
     judge: BaseStrategy,
-  ) -> OracleRouter:
+  ) -> "OracleRouter":
     """Create a router that always selects the judge (ablation mode)."""
 
     class _AlwaysJudgePolicy(RoutingPolicy):
@@ -761,22 +721,20 @@ class OracleRouter:
     chain = PolicyChain([_AlwaysJudgePolicy()], confidence_threshold=0.0)
     return cls(verifier, judge, chain)
 
-  # Core routing
-
   def route(
     self,
     task: Task,
     trajectories: TrajectoryList,
   ) -> DetailedRoutingDecision:
     """Compute a routing decision without running evaluation."""
-    t0 = time.perf_counter()
+    start_time = time.perf_counter()
 
     prior_hardness = self._hardness_cache.get(task.id)
     signals = self._extractor.extract(task, trajectories, prior_hardness=prior_hardness)
 
     strategy, confidence, votes, reasoning = self._chain.decide(task, trajectories, signals)
 
-    elapsed_ms = (time.perf_counter() - t0) * 1_000
+    elapsed_ms = (time.perf_counter() - start_time) * 1_000
 
     decision = DetailedRoutingDecision(
       task_id=task.id,
@@ -810,14 +768,12 @@ class OracleRouter:
 
     return result, decision
 
-  # Policy management
-
   def register_policy(
     self,
     policy: RoutingPolicy,
     *,
     position: int | None = None,
-  ) -> OracleRouter:
+  ) -> "OracleRouter":
     """Add a policy to the chain; returns ``self`` for fluent chaining."""
     policies = list(self._chain.policies)
     if position is None:
@@ -837,8 +793,6 @@ class OracleRouter:
     if not 0.0 <= hardness <= 1.0:
       raise ValueError(f"Hardness must be in [0, 1], got {hardness}")
     self._hardness_cache[task_id] = hardness
-
-  # Audit & introspection
 
   @property
   def decision_log(self) -> list[DetailedRoutingDecision]:
@@ -876,16 +830,8 @@ class OracleRouter:
     lines += ["═" * 56, ""]
     return "\n".join(lines)
 
-  # Private helpers
-
   def _resolve_strategy(self, strategy_type: StrategyType) -> BaseStrategy:
-    """Map a StrategyType to the corresponding strategy instance.
-
-    Raises:
-      ValueError: For unknown strategy types.
-    """
+    """Map a StrategyType to the corresponding strategy instance."""
     if strategy_type == StrategyType.VERIFIER:
       return self._verifier
-    if strategy_type == StrategyType.JUDGE:
-      return self._judge
-    raise ValueError(f"Unknown strategy type: {strategy_type!r}")
+    return self._judge

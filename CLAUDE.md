@@ -13,5 +13,5 @@ Key rules reproduced here to prevent mistakes:
 ## Claude-Specific Notes
 
 - Prefer `bash` tool for running `uv` commands over explaining them
-- When uncertain about architecture, read `docs/ARCHITECTURE.md` before proceeding
+- When uncertain about architecture, read `dev-docs/architecture.md` before proceeding
 - Use `TodoWrite` to track multi-step tasks; check off items as completed — persists within the session only, not to disk

@@ -1,7 +1,5 @@
 """LLM-as-a-Judge strategy: rubric-based holistic scoring without log-probability access."""
 
-from __future__ import annotations
-
 import re
 import statistics
 from itertools import combinations
@@ -20,7 +18,6 @@ from llm_oracle.core.models import (
 )
 from llm_oracle.core.strategy import BaseStrategy, LanguageModel
 
-# Rubric anchors used when the judge scores a single trajectory.
 _RUBRIC_ANCHORS = {
   1: "Completely failed — no meaningful progress toward the goal.",
   2: "Severely lacking — attempted but produced largely incorrect output.",
@@ -34,7 +31,6 @@ _RUBRIC_ANCHORS = {
   10: "Perfect — flawless solution that exceeds expectations.",
 }
 
-# Regex used to pull numeric scores out of free-form model output.
 _SCORE_PATTERN = re.compile(
   r"<score>\s*(\d+(?:\.\d+)?)\s*</score>",
   re.IGNORECASE,
@@ -104,8 +100,6 @@ class JudgeStrategy(BaseStrategy):
     self.swap_pairwise = swap_pairwise
     self.reasoning_depth = reasoning_depth
 
-  # BaseStrategy interface
-
   def get_strategy_type(self) -> StrategyType:
     return StrategyType.JUDGE
 
@@ -126,25 +120,28 @@ class JudgeStrategy(BaseStrategy):
     trajectory_scores: dict[str, ScoreResult] = {}
     pairwise_comparisons: list[PairwiseComparison] = []
 
-    # Pointwise scoring
     for trajectory in trajectories:
       score_result = self._score_trajectory_full(task, trajectory, **kwargs)
       trajectory_scores[trajectory.id] = score_result
 
-    # Pairwise comparisons
     if len(trajectories) > 1:
-      for traj_a, traj_b in combinations(trajectories, 2):
+      for trajectory_a, trajectory_b in combinations(trajectories, 2):
         for criterion in self.criteria:
-          comparison = self.compare_trajectories(task, traj_a, traj_b, criterion, **kwargs)
+          comparison = self.compare_trajectories(
+            task,
+            trajectory_a,
+            trajectory_b,
+            criterion,
+            **kwargs,
+          )
           pairwise_comparisons.append(comparison)
 
-    # Select best trajectory
-    best_id = self._select_best(trajectories, trajectory_scores, pairwise_comparisons)
+    best_trajectory_id = self._select_best(trajectories, trajectory_scores, pairwise_comparisons)
 
     return EvaluationResult(
       task_id=task.id,
       strategy_type=self.get_strategy_type(),
-      best_trajectory_id=best_id,
+      best_trajectory_id=best_trajectory_id,
       trajectory_scores=trajectory_scores,
       pairwise_comparisons=pairwise_comparisons,
       metadata={
@@ -229,7 +226,7 @@ class JudgeStrategy(BaseStrategy):
     elif score_b > score_a:
       winner = trajectory_b.id
     else:
-      winner = None  # tie
+      winner = None
 
     return PairwiseComparison(
       trajectory_a_id=trajectory_a.id,
@@ -241,8 +238,6 @@ class JudgeStrategy(BaseStrategy):
       confidence=self._pairwise_confidence(score_a, score_b),
       reasoning=reasoning,
     )
-
-  # Prompt construction
 
   def _build_pointwise_prompt(
     self,
@@ -355,7 +350,6 @@ required value."""
         "(2) what was done incorrectly or is missing, and (3) your overall "
         "assessment. Be specific and reference the trajectory content."
       )
-    # chain_of_thought
     return (
       "Think step by step:\n"
       "  1. Identify the key requirements for the criterion.\n"
@@ -364,8 +358,6 @@ required value."""
       "  4. Arrive at a justified score.\n"
       "Show all reasoning explicitly before your final score."
     )
-
-  # Scoring helpers
 
   def _score_trajectory_full(
     self,
@@ -385,7 +377,9 @@ required value."""
           all_reasoning.append(f"[{criterion.name}]\n{result.reasoning.strip()}")
 
     avg_criterion_scores: dict[str, float] = {
-      cid: statistics.mean(scores) for cid, scores in criterion_scores.items() if scores
+      criterion_id: statistics.mean(scores)
+      for criterion_id, scores in criterion_scores.items()
+      if scores
     }
 
     overall = self.aggregate_criterion_scores(avg_criterion_scores)
@@ -420,8 +414,6 @@ required value."""
 
     return score_a, score_b, text
 
-  # Best-trajectory selection
-
   def _select_best(
     self,
     trajectories: TrajectoryList,
@@ -435,13 +427,12 @@ required value."""
     if len(trajectories) == 1:
       return trajectories[0].id
 
-    # Build combined score: 70 % pointwise + 30 % pairwise win-rate
     win_rates = self._compute_win_rates(trajectories, comparisons)
 
-    def combined(tid: str) -> float:
-      pointwise = scores[tid].score if tid in scores else 0.5
-      pairwise_wr = win_rates.get(tid, 0.5)
-      return 0.7 * pointwise + 0.3 * pairwise_wr
+    def combined(trajectory_id: str) -> float:
+      pointwise = scores[trajectory_id].score if trajectory_id in scores else 0.5
+      pairwise_win_rate = win_rates.get(trajectory_id, 0.5)
+      return 0.7 * pointwise + 0.3 * pairwise_win_rate
 
     return max((t.id for t in trajectories), key=combined)
 
@@ -454,22 +445,24 @@ required value."""
     wins: dict[str, float] = {t.id: 0.0 for t in trajectories}
     totals: dict[str, int] = {t.id: 0 for t in trajectories}
 
-    for comp in comparisons:
-      # Each side participates in this match
-      totals[comp.trajectory_a_id] = totals.get(comp.trajectory_a_id, 0) + 1
-      totals[comp.trajectory_b_id] = totals.get(comp.trajectory_b_id, 0) + 1
+    for comparison in comparisons:
+      totals[comparison.trajectory_a_id] = totals.get(comparison.trajectory_a_id, 0) + 1
+      totals[comparison.trajectory_b_id] = totals.get(comparison.trajectory_b_id, 0) + 1
 
-      if comp.winner == comp.trajectory_a_id:
-        wins[comp.trajectory_a_id] = wins.get(comp.trajectory_a_id, 0.0) + 1.0
-      elif comp.winner == comp.trajectory_b_id:
-        wins[comp.trajectory_b_id] = wins.get(comp.trajectory_b_id, 0.0) + 1.0
+      if comparison.winner == comparison.trajectory_a_id:
+        wins[comparison.trajectory_a_id] = wins.get(comparison.trajectory_a_id, 0.0) + 1.0
+      elif comparison.winner == comparison.trajectory_b_id:
+        wins[comparison.trajectory_b_id] = wins.get(comparison.trajectory_b_id, 0.0) + 1.0
       else:
-        wins[comp.trajectory_a_id] = wins.get(comp.trajectory_a_id, 0.0) + 0.5
-        wins[comp.trajectory_b_id] = wins.get(comp.trajectory_b_id, 0.0) + 0.5
+        wins[comparison.trajectory_a_id] = wins.get(comparison.trajectory_a_id, 0.0) + 0.5
+        wins[comparison.trajectory_b_id] = wins.get(comparison.trajectory_b_id, 0.0) + 0.5
 
-    return {tid: wins[tid] / totals[tid] if totals[tid] > 0 else 0.5 for tid in wins}
-
-  # Parsing utilities
+    return {
+      trajectory_id: wins[trajectory_id] / totals[trajectory_id]
+      if totals[trajectory_id] > 0
+      else 0.5
+      for trajectory_id in wins
+    }
 
   def _parse_pointwise_score(self, text: str) -> float:
     """Parse a pointwise score from model output, clamped to ``[score_min, score_max]``."""
@@ -487,12 +480,9 @@ required value."""
         raw = float(match.group(1))
         return max(self.score_min, min(self.score_max, raw))
       except ValueError:
-        pass
+        return (self.score_min + self.score_max) / 2.0
 
-    # Graceful fallback: return midpoint
     return (self.score_min + self.score_max) / 2.0
-
-  # Normalisation & confidence
 
   def _normalize(self, raw: float) -> float:
     """Normalize a raw score from ``[score_min, score_max]`` to ``[0, 1]``."""
@@ -504,7 +494,6 @@ required value."""
   def _score_to_confidence(self, raw: float) -> float:
     """Map a raw score to confidence; extreme scores are more reliable than mid-range."""
     normalized = self._normalize(raw)
-    # Distance from 0.5 (center) → higher distance = more confident
     distance = abs(normalized - 0.5)
     return 0.5 + distance
 
@@ -526,8 +515,6 @@ required value."""
     except statistics.StatisticsError:
       stdev = 0.0
 
-    # Low stdev → high agreement → high confidence
-    # stdev is in [0, 0.5] for normalized scores; map linearly.
     confidence = 1.0 - min(stdev * 2.0, 0.5)
     return max(0.5, confidence)
 
@@ -537,5 +524,4 @@ required value."""
     if span == 0:
       return 0.5
     margin = abs(score_a - score_b) / span
-    # margin ∈ [0, 1]; map to confidence ∈ [0.5, 1.0]
     return 0.5 + margin * 0.5

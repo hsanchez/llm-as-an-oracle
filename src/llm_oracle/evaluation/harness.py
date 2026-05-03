@@ -4,8 +4,6 @@ Hardness is measured across four dimensions: score spread, strategy disagreement
 confidence gap, and oracle gap (selection error).
 """
 
-from __future__ import annotations
-
 import statistics
 import time
 from collections.abc import Iterator, Sequence
@@ -21,26 +19,22 @@ from llm_oracle.core.models import (
 )
 from llm_oracle.core.strategy import BaseStrategy
 
-# Per-task hardness record
-
 
 @dataclass
 class TaskHardnessRecord:
   """Hardness measurements and evaluation results for a single task."""
 
   task_id: str
-  hardness_score: float = 0.0  # [0, 1] composite; 1 = both strategies struggled badly, 0 = both agreed with high confidence
-  score_spread: float = 0.0  # mean absolute difference (not variance) between Verifier and Judge scores per trajectory; high = they disagree on how good each candidate is
-  strategy_disagreement: float = 0.0  # fraction of (A, B) pairs where Verifier prefers A but Judge prefers B; high = strategies disagree on relative ranking
-  avg_confidence: float = 1.0  # mean confidence across all scores from both strategies; low = evaluators were uncertain about their own verdicts
-  oracle_gap_verifier: float = 0.0  # reward forfeited by following the Verifier: best_possible_reward − reward_of_verifier_pick; 0 = perfect pick
-  oracle_gap_judge: float = 0.0  # same as oracle_gap_verifier but for the Judge; compare both to see which strategy made the costlier mistake
+  hardness_score: float = 0.0
+  score_spread: float = 0.0
+  strategy_disagreement: float = 0.0
+  avg_confidence: float = 1.0
+  oracle_gap_verifier: float = 0.0
+  oracle_gap_judge: float = 0.0
   verifier_result: EvaluationResult | None = None
   judge_result: EvaluationResult | None = None
   elapsed_verifier_s: float = 0.0
   elapsed_judge_s: float = 0.0
-
-  # Convenience
 
   @property
   def verifier_wins(self) -> bool:
@@ -60,9 +54,6 @@ class TaskHardnessRecord:
     return self.verifier_result.best_trajectory_id == self.judge_result.best_trajectory_id
 
 
-# Aggregate report
-
-
 @dataclass
 class HarnessReport:
   """Aggregated comparison report for all evaluated tasks."""
@@ -74,27 +65,29 @@ class HarnessReport:
   hard_task_threshold: float = 0.6
   total_elapsed_s: float = 0.0
 
-  # Slicing helpers
-
   @property
   def hard_tasks(self) -> list[TaskHardnessRecord]:
     """Tasks whose hardness score exceeds ``hard_task_threshold``."""
-    return [r for r in self.task_records if r.hardness_score >= self.hard_task_threshold]
+    return [
+      record for record in self.task_records if record.hardness_score >= self.hard_task_threshold
+    ]
 
   @property
   def easy_tasks(self) -> list[TaskHardnessRecord]:
     """Tasks whose hardness score is below ``hard_task_threshold``."""
-    return [r for r in self.task_records if r.hardness_score < self.hard_task_threshold]
+    return [
+      record for record in self.task_records if record.hardness_score < self.hard_task_threshold
+    ]
 
   @property
   def verifier_wins_count(self) -> int:
     """Number of tasks where the verifier outperformed the judge."""
-    return sum(1 for r in self.task_records if r.verifier_wins)
+    return sum(1 for record in self.task_records if record.verifier_wins)
 
   @property
   def judge_wins_count(self) -> int:
     """Number of tasks where the judge outperformed the verifier."""
-    return sum(1 for r in self.task_records if r.judge_wins)
+    return sum(1 for record in self.task_records if record.judge_wins)
 
   @property
   def tie_count(self) -> int:
@@ -117,11 +110,9 @@ class HarnessReport:
     """Judge accuracy restricted to easy tasks."""
     return _accuracy_on(self.easy_tasks, StrategyType.JUDGE)
 
-  # Reporting
-
   def summary(self) -> str:
     """Render a human-readable comparison summary table."""
-    n = len(self.task_records)
+    record_count = len(self.task_records)
     n_hard = len(self.hard_tasks)
     n_easy = len(self.easy_tasks)
 
@@ -132,7 +123,7 @@ class HarnessReport:
       bar,
       "  LLM Oracle — Evaluation Harness Report",
       bar,
-      f"  Tasks evaluated : {n}",
+      f"  Tasks evaluated : {record_count}",
       f"  Hard tasks      : {n_hard}  (threshold ≥ {self.hard_task_threshold:.2f})",
       f"  Easy tasks      : {n_easy}",
       f"  Total runtime   : {self.total_elapsed_s:.1f} s",
@@ -153,11 +144,11 @@ class HarnessReport:
       ),
       _row(
         "Wins (lower oracle gap)",
-        self.verifier_wins_count / max(n, 1),
-        self.judge_wins_count / max(n, 1),
+        self.verifier_wins_count / max(record_count, 1),
+        self.judge_wins_count / max(record_count, 1),
         fmt="count",
-        wins_v=self.verifier_wins_count,
-        wins_j=self.judge_wins_count,
+        verifier_wins=self.verifier_wins_count,
+        judge_wins=self.judge_wins_count,
       ),
       "  ├──────────────────────────────┼────────────┼────────────┤",
       _row(
@@ -184,35 +175,33 @@ class HarnessReport:
     separator = "  " + "-" * (len(header) - 2)
     rows = [header, separator]
 
-    for r in sorted(self.task_records, key=lambda x: -x.hardness_score):
-      hard_flag = "✓" if r.hardness_score >= self.hard_task_threshold else " "
-      winner = "Verifier" if r.verifier_wins else ("Judge" if r.judge_wins else "Tie")
-      agree = "✓" if r.strategies_agree else "✗"
+    for record in sorted(self.task_records, key=lambda item: -item.hardness_score):
+      hard_flag = "✓" if record.hardness_score >= self.hard_task_threshold else " "
+      winner = "Verifier" if record.verifier_wins else ("Judge" if record.judge_wins else "Tie")
+      agree = "✓" if record.strategies_agree else "✗"
       rows.append(
-        f"  {r.task_id:<30s}  {hard_flag:>5s}  {r.oracle_gap_verifier:>6.3f}  "
-        f"{r.oracle_gap_judge:>6.3f}  {winner:>9s}  {agree:>5s}"
+        f"  {record.task_id:<30s}  {hard_flag:>5s}  "
+        f"{record.oracle_gap_verifier:>6.3f}  "
+        f"{record.oracle_gap_judge:>6.3f}  {winner:>9s}  {agree:>5s}"
       )
 
     return "\n".join(rows)
-
-  # Private helpers
 
   def _avg_elapsed(self, strategy: StrategyType) -> float:
     if not self.task_records:
       return 0.0
     if strategy == StrategyType.VERIFIER:
-      values = [r.elapsed_verifier_s for r in self.task_records]
+      values = [record.elapsed_verifier_s for record in self.task_records]
     else:
-      values = [r.elapsed_judge_s for r in self.task_records]
+      values = [record.elapsed_judge_s for record in self.task_records]
     return statistics.mean(values) if values else 0.0
 
   def _agreement_rate(self) -> float:
     if not self.task_records:
       return 0.0
-    return sum(1 for r in self.task_records if r.strategies_agree) / len(self.task_records)
-
-
-# Harness
+    return sum(1 for record in self.task_records if record.strategies_agree) / len(
+      self.task_records
+    )
 
 
 @dataclass
@@ -241,8 +230,6 @@ class EvaluationHarness:
       raise TypeError(f"'judge' must be a JUDGE strategy, got {self.judge.get_strategy_type()}")
     _validate_hardness_weights(self.hardness_weights)
 
-  # Public API
-
   def run(
     self,
     task_trajectories: Sequence[tuple[Task, TrajectoryList]],
@@ -257,14 +244,14 @@ class EvaluationHarness:
     if not task_trajectories:
       return HarnessReport(hard_task_threshold=self.hard_task_threshold)
 
-    t0 = time.perf_counter()
+    start_time = time.perf_counter()
 
     if parallel and len(task_trajectories) > 1:
       records = self._run_parallel(task_trajectories)
     else:
       records = list(self._run_sequential(task_trajectories))
 
-    total_elapsed = time.perf_counter() - t0
+    total_elapsed = time.perf_counter() - start_time
     return self._build_report(records, total_elapsed)
 
   def run_single(
@@ -280,11 +267,16 @@ class EvaluationHarness:
     if not trajectories:
       raise ValueError(f"Trajectory list for task '{task.id}' is empty")
 
-    verifier_result, elapsed_v = _timed(self.verifier.evaluate, task, trajectories)
-    judge_result, elapsed_j = _timed(self.judge.evaluate, task, trajectories)
+    verifier_result, elapsed_verifier = _timed(self.verifier.evaluate, task, trajectories)
+    judge_result, elapsed_judge = _timed(self.judge.evaluate, task, trajectories)
 
     return self._compute_record(
-      task, trajectories, verifier_result, judge_result, elapsed_v, elapsed_j
+      task,
+      trajectories,
+      verifier_result,
+      judge_result,
+      elapsed_verifier,
+      elapsed_judge,
     )
 
   def hardness_score(
@@ -297,8 +289,6 @@ class EvaluationHarness:
     """Compute composite hardness in [0, 1] from pre-computed strategy results."""
     record = self._compute_record(task, trajectories, verifier_result, judge_result)
     return record.hardness_score
-
-  # Internal run helpers
 
   def _run_sequential(
     self,
@@ -314,13 +304,12 @@ class EvaluationHarness:
     records: list[TaskHardnessRecord] = []
     with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
       futures = {
-        pool.submit(self.run_single, task, trajs): task.id for task, trajs in task_trajectories
+        pool.submit(self.run_single, task, trajectories): task.id
+        for task, trajectories in task_trajectories
       }
       for future in as_completed(futures):
         records.append(future.result())
     return records
-
-  # Record computation
 
   def _compute_record(
     self,
@@ -328,21 +317,19 @@ class EvaluationHarness:
     trajectories: TrajectoryList,
     verifier_result: EvaluationResult,
     judge_result: EvaluationResult,
-    elapsed_v: float = 0.0,
-    elapsed_j: float = 0.0,
+    elapsed_verifier: float = 0.0,
+    elapsed_judge: float = 0.0,
   ) -> TaskHardnessRecord:
     oracle_id = _oracle_best(trajectories)
 
     score_var = _inter_strategy_score_spread(verifier_result, judge_result)
     disagreement = _pairwise_disagreement(trajectories, verifier_result, judge_result)
     avg_conf = _avg_confidence(verifier_result, judge_result)
-    oracle_gap_v = _oracle_gap(oracle_id, verifier_result, trajectories)
-    oracle_gap_j = _oracle_gap(oracle_id, judge_result, trajectories)
+    oracle_gap_verifier = _oracle_gap(oracle_id, verifier_result, trajectories)
+    oracle_gap_judge = _oracle_gap(oracle_id, judge_result, trajectories)
 
-    # Oracle gap component: use average of both gaps.
-    oracle_gap_component = (oracle_gap_v + oracle_gap_j) / 2.0
+    oracle_gap_component = (oracle_gap_verifier + oracle_gap_judge) / 2.0
 
-    # Confidence gap: invert so that low confidence = high hardness.
     confidence_hardness = 1.0 - avg_conf
 
     hardness = (
@@ -359,15 +346,13 @@ class EvaluationHarness:
       score_spread=score_var,
       strategy_disagreement=disagreement,
       avg_confidence=avg_conf,
-      oracle_gap_verifier=oracle_gap_v,
-      oracle_gap_judge=oracle_gap_j,
+      oracle_gap_verifier=oracle_gap_verifier,
+      oracle_gap_judge=oracle_gap_judge,
       verifier_result=verifier_result,
       judge_result=judge_result,
-      elapsed_verifier_s=elapsed_v,
-      elapsed_judge_s=elapsed_j,
+      elapsed_verifier_s=elapsed_verifier,
+      elapsed_judge_s=elapsed_judge,
     )
-
-  # Report assembly
 
   def _build_report(
     self,
@@ -382,7 +367,7 @@ class EvaluationHarness:
 
     verifier_acc = _accuracy_on(records, StrategyType.VERIFIER)
     judge_acc = _accuracy_on(records, StrategyType.JUDGE)
-    avg_hardness = statistics.mean(r.hardness_score for r in records)
+    avg_hardness = statistics.mean(record.hardness_score for record in records)
 
     return HarnessReport(
       task_records=records,
@@ -394,14 +379,11 @@ class EvaluationHarness:
     )
 
 
-# Module-level helpers
-
-
 def _timed(fn, *args, **kwargs) -> tuple:
   """Call *fn* with timing.  Returns ``(result, elapsed_seconds)``."""
-  t0 = time.perf_counter()
+  start_time = time.perf_counter()
   result = fn(*args, **kwargs)
-  return result, time.perf_counter() - t0
+  return result, time.perf_counter() - start_time
 
 
 def _oracle_best(trajectories: TrajectoryList) -> str | None:
@@ -433,7 +415,6 @@ def _oracle_gap(
     selected_reward = reward_map.get(selected_id, 0.0)
     return max(0.0, oracle_reward - selected_reward)
 
-  # No ground truth: gap is 0 when the selected is already the highest scored.
   selected_score = scores.get(selected_id, ScoreResult(trajectory_id=selected_id, score=0.0)).score
   best_score = max(s.score for s in scores.values())
   return max(0.0, best_score - selected_score)
@@ -444,13 +425,16 @@ def _inter_strategy_score_spread(
   judge_result: EvaluationResult,
 ) -> float:
   """Mean absolute score difference between strategies per trajectory (absolute quality spread)."""
-  v_scores = verifier_result.trajectory_scores
-  j_scores = judge_result.trajectory_scores
-  shared = [tid for tid in v_scores if tid in j_scores]
+  verifier_scores = verifier_result.trajectory_scores
+  judge_scores = judge_result.trajectory_scores
+  shared = [trajectory_id for trajectory_id in verifier_scores if trajectory_id in judge_scores]
   if not shared:
     return 0.0
-  diffs = [abs(v_scores[tid].score - j_scores[tid].score) for tid in shared]
-  return statistics.mean(diffs)
+  differences = [
+    abs(verifier_scores[trajectory_id].score - judge_scores[trajectory_id].score)
+    for trajectory_id in shared
+  ]
+  return statistics.mean(differences)
 
 
 def _pairwise_disagreement(
@@ -459,28 +443,38 @@ def _pairwise_disagreement(
   judge_result: EvaluationResult,
 ) -> float:
   """Fraction of trajectory pairs where strategies disagree on ranking."""
-  v_scores = verifier_result.trajectory_scores
-  j_scores = judge_result.trajectory_scores
+  verifier_scores = verifier_result.trajectory_scores
+  judge_scores = judge_result.trajectory_scores
 
-  tids = [t.id for t in trajectories if t.id in v_scores and t.id in j_scores]
-  if len(tids) < 2:
+  trajectory_ids = [
+    trajectory.id
+    for trajectory in trajectories
+    if trajectory.id in verifier_scores and trajectory.id in judge_scores
+  ]
+  if len(trajectory_ids) < 2:
     return 0.0
 
-  pairs = [(a, b) for idx, a in enumerate(tids) for b in tids[idx + 1 :]]
+  pairs = [
+    (trajectory_a_id, trajectory_b_id)
+    for index, trajectory_a_id in enumerate(trajectory_ids)
+    for trajectory_b_id in trajectory_ids[index + 1 :]
+  ]
   if not pairs:
     return 0.0
 
   disagreements = 0
-  for tid_a, tid_b in pairs:
-    v_a, v_b = v_scores[tid_a].score, v_scores[tid_b].score
-    j_a, j_b = j_scores[tid_a].score, j_scores[tid_b].score
+  for trajectory_a_id, trajectory_b_id in pairs:
+    verifier_score_a = verifier_scores[trajectory_a_id].score
+    verifier_score_b = verifier_scores[trajectory_b_id].score
+    judge_score_a = judge_scores[trajectory_a_id].score
+    judge_score_b = judge_scores[trajectory_b_id].score
 
-    v_prefers_a = v_a > v_b
-    j_prefers_a = j_a > j_b
-    v_tie = abs(v_a - v_b) < 1e-9
-    j_tie = abs(j_a - j_b) < 1e-9
+    verifier_prefers_a = verifier_score_a > verifier_score_b
+    judge_prefers_a = judge_score_a > judge_score_b
+    verifier_tie = abs(verifier_score_a - verifier_score_b) < 1e-9
+    judge_tie = abs(judge_score_a - judge_score_b) < 1e-9
 
-    if not v_tie and not j_tie and (v_prefers_a != j_prefers_a):
+    if not verifier_tie and not judge_tie and (verifier_prefers_a != judge_prefers_a):
       disagreements += 1
 
   return disagreements / len(pairs)
@@ -515,7 +509,6 @@ def _accuracy_on(
     else:
       gap = record.oracle_gap_judge
 
-    # A near-zero gap means the correct trajectory was selected.
     if gap < 1e-6:
       correct += 1
 
@@ -538,9 +531,9 @@ def _validate_hardness_weights(weights: dict[str, float]) -> None:
   if missing:
     raise ValueError(f"Missing hardness weight keys: {missing}")
 
-  for key, val in weights.items():
-    if val < 0:
-      raise ValueError(f"Hardness weight '{key}' must be non-negative, got {val}")
+  for key, value in weights.items():
+    if value < 0:
+      raise ValueError(f"Hardness weight '{key}' must be non-negative, got {value}")
 
   total = sum(weights[k] for k in required_keys)
   if abs(total - 1.0) > 1e-6:
@@ -549,30 +542,27 @@ def _validate_hardness_weights(weights: dict[str, float]) -> None:
     )
 
 
-# Formatting utilities
-
-
 def _row(
   label: str,
-  val_v: float,
-  val_j: float,
+  verifier_value: float,
+  judge_value: float,
   *,
   fmt: str = "pct",
-  wins_v: int = 0,
-  wins_j: int = 0,
+  verifier_wins: int = 0,
+  judge_wins: int = 0,
 ) -> str:
   """Format one row of the summary table; fmt is one of ``"pct"``, ``"time"``, ``"count"``."""
   if fmt == "pct":
-    v_str = f"{val_v:.1%}"
-    j_str = f"{val_j:.1%}"
+    verifier_text = f"{verifier_value:.1%}"
+    judge_text = f"{judge_value:.1%}"
   elif fmt == "time":
-    v_str = f"{val_v:.2f} s"
-    j_str = f"{val_j:.2f} s"
+    verifier_text = f"{verifier_value:.2f} s"
+    judge_text = f"{judge_value:.2f} s"
   elif fmt == "count":
-    v_str = str(wins_v)
-    j_str = str(wins_j)
+    verifier_text = str(verifier_wins)
+    judge_text = str(judge_wins)
   else:
-    v_str = f"{val_v:.4f}"
-    j_str = f"{val_j:.4f}"
+    verifier_text = f"{verifier_value:.4f}"
+    judge_text = f"{judge_value:.4f}"
 
-  return f"  │ {label:<28s}  │ {v_str:^10s} │ {j_str:^10s} │"
+  return f"  │ {label:<28s}  │ {verifier_text:^10s} │ {judge_text:^10s} │"
