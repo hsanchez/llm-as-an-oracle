@@ -140,9 +140,9 @@ At the harness level, `EvaluationHarness` computes:
 - `oracle_gap_verifier` and `oracle_gap_judge`: how far each selected trajectory is from the oracle-best one
 - `score_spread`: absolute score difference between Judge and Verifier on shared trajectories
 - `strategy_disagreement`: fraction of trajectory pairs ranked differently by the two strategies
-- `avg_confidence`: average confidence across both strategies
+- `average_confidence`: average confidence across both strategies
 - `hardness_score`: weighted composite of score spread, disagreement, inverted confidence, and oracle gap
-- `elapsed_verifier_s` and `elapsed_judge_s`: runtime per strategy
+- `elapsed_verifier_seconds` and `elapsed_judge_seconds`: runtime per strategy
 
 ## Glossary
 

@@ -76,7 +76,7 @@ class JudgeStrategy(BaseStrategy):
     score_max: float = 10.0,
     swap_pairwise: bool = True,
     reasoning_depth: str = "detailed",
-  ):
+  ) -> None:
     """Initialize the judge strategy.
 
     **Score scale** — rubric anchors are hardcoded to 1–10.  ``score_min`` and
@@ -376,19 +376,19 @@ required value."""
         if rep == 0:
           all_reasoning.append(f"[{criterion.name}]\n{result.reasoning.strip()}")
 
-    avg_criterion_scores: dict[str, float] = {
+    average_criterion_scores: dict[str, float] = {
       criterion_id: statistics.mean(scores)
       for criterion_id, scores in criterion_scores.items()
       if scores
     }
 
-    overall = self.aggregate_criterion_scores(avg_criterion_scores)
-    confidence = self._multi_criterion_confidence(avg_criterion_scores)
+    overall = self.aggregate_criterion_scores(average_criterion_scores)
+    confidence = self._multi_criterion_confidence(average_criterion_scores)
 
     return ScoreResult(
       trajectory_id=trajectory.id,
       score=overall,
-      criterion_scores=avg_criterion_scores,
+      criterion_scores=average_criterion_scores,
       confidence=confidence,
       reasoning="\n\n".join(all_reasoning),
       metadata={

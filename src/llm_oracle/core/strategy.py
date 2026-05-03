@@ -48,7 +48,7 @@ class BaseStrategy(abc.ABC):
     model: LanguageModel,
     config: ScoringConfig,
     criteria: list[EvaluationCriterion],
-  ):
+  ) -> None:
     self.model = model
     self.config = config
     self.criteria = criteria

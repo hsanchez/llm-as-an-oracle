@@ -78,10 +78,10 @@ class OpenAIProvider(BaseProvider):
     super().__init__(model_id, **kwargs)
     try:
       import openai  # type: ignore[import-untyped]  # noqa: PLC0415
-    except ImportError as exc:
+    except ImportError as exception:
       raise ImportError(
         "openai package is required for OpenAIProvider. Install it with: pip install openai"
-      ) from exc
+      ) from exception
 
     client_kwargs: dict[str, Any] = {
       "api_key": api_key or os.getenv("OPENAI_API_KEY"),
@@ -157,11 +157,11 @@ class AnthropicProvider(BaseProvider):
     super().__init__(model_id, **kwargs)
     try:
       import anthropic  # type: ignore[import-untyped]  # noqa: PLC0415
-    except ImportError as exc:
+    except ImportError as exception:
       raise ImportError(
         "anthropic package is required for AnthropicProvider. "
         "Install it with: pip install anthropic"
-      ) from exc
+      ) from exception
 
     self._client = anthropic.Anthropic(api_key=api_key or os.getenv("ANTHROPIC_API_KEY"))
     self._system = system
@@ -234,11 +234,11 @@ class GeminiProvider(BaseProvider):
     super().__init__(model_id, **kwargs)
     try:
       from google import genai  # type: ignore[import-untyped]  # noqa: PLC0415
-    except ImportError as exc:
+    except ImportError as exception:
       raise ImportError(
         "google-genai package is required for GeminiProvider. "
         "Install it with: pip install google-genai"
-      ) from exc
+      ) from exception
 
     self._genai = genai
 
@@ -416,18 +416,18 @@ class StubProvider(BaseProvider):
 
     alphabet = list("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
     tag_positions = self._find_tag_token_positions(text, is_pairwise, score, score_a, score_b)
-    for i, tok in enumerate(tokens):
+    for i, token in enumerate(tokens):
       if i in tag_positions:
         target_letter = tag_positions[i]
         probs = self._peaked_distribution(target_letter, alphabet, peak=0.70)
-        lps: list[tuple[str, float]] = [
+        logprobs: list[tuple[str, float]] = [
           (letter, math.log(p + 1e-12)) for letter, p in probs.items()
         ]
-        lps.sort(key=lambda x: -x[1])
-        position_logprobs.append(lps[:20])
+        logprobs.sort(key=lambda x: -x[1])
+        position_logprobs.append(logprobs[:20])
       else:
-        base_lp = math.log(1.0 / max(len(alphabet), 1))
-        position_logprobs.append([(tok, base_lp)])
+        base_logprob = math.log(1.0 / max(len(alphabet), 1))
+        position_logprobs.append([(token, base_logprob)])
 
     return tokens, position_logprobs
 
@@ -466,10 +466,10 @@ class StubProvider(BaseProvider):
     neighbours = self._rng.sample(others, n_neighbours)
     per_neighbour = remaining / n_neighbours
 
-    dist: dict[str, float] = {tok: 0.0 for tok in alphabet}
+    dist: dict[str, float] = {token: 0.0 for token in alphabet}
     dist[target] = peak
-    for nb in neighbours:
-      dist[nb] = per_neighbour
+    for neighbour in neighbours:
+      dist[neighbour] = per_neighbour
 
     return dist
 

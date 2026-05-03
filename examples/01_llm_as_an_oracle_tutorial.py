@@ -513,7 +513,7 @@ print("  task_id:", record.task_id)
 print("  hardness_score:", round(record.hardness_score, 4))
 print("  score_spread:", round(record.score_spread, 4))
 print("  strategy_disagreement:", round(record.strategy_disagreement, 4))
-print("  avg_confidence:", round(record.avg_confidence, 4))
+print("  average_confidence:", round(record.average_confidence, 4))
 print("  oracle_gap_verifier:", round(record.oracle_gap_verifier, 4))
 print("  oracle_gap_judge:", round(record.oracle_gap_judge, 4))
 

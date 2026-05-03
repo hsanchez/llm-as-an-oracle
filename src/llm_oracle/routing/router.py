@@ -202,9 +202,9 @@ class KeywordDomainPolicy(RoutingPolicy):
     trajectories: TrajectoryList,
     signals: RoutingSignals,
   ) -> PolicyVote:
-    v_density = signals.verifiable_keyword_density
-    j_density = signals.judgement_keyword_density
-    gap = v_density - j_density
+    verifiable_density = signals.verifiable_keyword_density
+    judgement_density = signals.judgement_keyword_density
+    gap = verifiable_density - judgement_density
 
     if gap > 0.05:
       confidence = min(0.95, 0.6 + gap * 2.0)
@@ -563,12 +563,12 @@ class PolicyChain:
       "",
       "Policy votes:",
     ]
-    for v in votes:
-      marker = "→" if v.preferred == winner else "←"
+    for vote in votes:
+      marker = "→" if vote.preferred == winner else "←"
       lines.append(
-        f"  {marker} [{v.policy_name}] "
-        f"{v.preferred.value} @ {v.confidence:.2f} (w={v.weight}): "
-        f"{v.reasoning}"
+        f"  {marker} [{vote.policy_name}] "
+        f"{vote.preferred.value} @ {vote.confidence:.2f} (w={vote.weight}): "
+        f"{vote.reasoning}"
       )
     return "\n".join(lines)
 
@@ -591,12 +591,12 @@ class SignalExtractor:
     text = (task.problem_statement + " " + task.description).lower()
     words = set(re.findall(r"\b\w+\b", text))
 
-    v_matches = len(words & _VERIFIABLE_KEYWORDS)
-    j_matches = len(words & _JUDGEMENT_KEYWORDS)
+    verifiable_matches = len(words & _VERIFIABLE_KEYWORDS)
+    judgement_matches = len(words & _JUDGEMENT_KEYWORDS)
     total_checked = len(_VERIFIABLE_KEYWORDS | _JUDGEMENT_KEYWORDS)
 
-    v_density = v_matches / total_checked if total_checked else 0.0
-    j_density = j_matches / total_checked if total_checked else 0.0
+    verifiable_density = verifiable_matches / total_checked if total_checked else 0.0
+    judgement_density = judgement_matches / total_checked if total_checked else 0.0
 
     has_output = float(any(t.output for t in trajectories))
 
@@ -612,8 +612,8 @@ class SignalExtractor:
       has_test_cases=float(bool(task.test_cases)),
       trajectory_count=len(trajectories),
       stated_difficulty=stated_difficulty,
-      verifiable_keyword_density=v_density,
-      judgement_keyword_density=j_density,
+      verifiable_keyword_density=verifiable_density,
+      judgement_keyword_density=judgement_density,
       problem_length=min(len(task.problem_statement), 2000) / 2000.0,
       output_available=has_output,
       prior_hardness=prior_hardness,
@@ -808,8 +808,8 @@ class OracleRouter:
       1 for d in self._decision_log if d.selected_strategy == StrategyType.VERIFIER
     )
     judge_count = len(self._decision_log) - verifier_count
-    avg_conf = sum(d.confidence for d in self._decision_log) / len(self._decision_log)
-    avg_ms = sum(d.elapsed_ms for d in self._decision_log) / len(self._decision_log)
+    average_confidence = sum(d.confidence for d in self._decision_log) / len(self._decision_log)
+    average_ms = sum(d.elapsed_ms for d in self._decision_log) / len(self._decision_log)
 
     lines = [
       "",
@@ -819,14 +819,16 @@ class OracleRouter:
       f"  Total decisions  : {len(self._decision_log)}",
       f"  → Verifier       : {verifier_count}",
       f"  → Judge          : {judge_count}",
-      f"  Avg confidence   : {avg_conf:.3f}",
-      f"  Avg latency      : {avg_ms:.2f} ms",
+      f"  Avg confidence   : {average_confidence:.3f}",
+      f"  Avg latency      : {average_ms:.2f} ms",
       "",
       f"  {'Task':<30s}  {'Strategy':>9s}  {'Conf':>6s}",
       "  " + "-" * 50,
     ]
-    for d in self._decision_log:
-      lines.append(f"  {d.task_id:<30s}  {d.selected_strategy.value:>9s}  {d.confidence:>6.3f}")
+    for decision in self._decision_log:
+      lines.append(
+        f"  {decision.task_id:<30s}  {decision.selected_strategy.value:>9s}  {decision.confidence:>6.3f}"
+      )
     lines += ["═" * 56, ""]
     return "\n".join(lines)
 

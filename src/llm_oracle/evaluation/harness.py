@@ -28,13 +28,13 @@ class TaskHardnessRecord:
   hardness_score: float = 0.0
   score_spread: float = 0.0
   strategy_disagreement: float = 0.0
-  avg_confidence: float = 1.0
+  average_confidence: float = 1.0
   oracle_gap_verifier: float = 0.0
   oracle_gap_judge: float = 0.0
   verifier_result: EvaluationResult | None = None
   judge_result: EvaluationResult | None = None
-  elapsed_verifier_s: float = 0.0
-  elapsed_judge_s: float = 0.0
+  elapsed_verifier_seconds: float = 0.0
+  elapsed_judge_seconds: float = 0.0
 
   @property
   def verifier_wins(self) -> bool:
@@ -61,9 +61,9 @@ class HarnessReport:
   task_records: list[TaskHardnessRecord] = field(default_factory=list)
   verifier_accuracy: float = 0.0
   judge_accuracy: float = 0.0
-  avg_hardness: float = 0.0
+  average_hardness: float = 0.0
   hard_task_threshold: float = 0.6
-  total_elapsed_s: float = 0.0
+  total_elapsed_seconds: float = 0.0
 
   @property
   def hard_tasks(self) -> list[TaskHardnessRecord]:
@@ -113,56 +113,56 @@ class HarnessReport:
   def summary(self) -> str:
     """Render a human-readable comparison summary table."""
     record_count = len(self.task_records)
-    n_hard = len(self.hard_tasks)
-    n_easy = len(self.easy_tasks)
+    num_hard_tasks = len(self.hard_tasks)
+    num_easy_tasks = len(self.easy_tasks)
 
-    bar = "═" * 64
+    divider = "═" * 64
 
     lines = [
       "",
-      bar,
+      divider,
       "  LLM Oracle — Evaluation Harness Report",
-      bar,
+      divider,
       f"  Tasks evaluated : {record_count}",
-      f"  Hard tasks      : {n_hard}  (threshold ≥ {self.hard_task_threshold:.2f})",
-      f"  Easy tasks      : {n_easy}",
-      f"  Total runtime   : {self.total_elapsed_s:.1f} s",
+      f"  Hard tasks      : {num_hard_tasks}  (threshold ≥ {self.hard_task_threshold:.2f})",
+      f"  Easy tasks      : {num_easy_tasks}",
+      f"  Total runtime   : {self.total_elapsed_seconds:.1f} s",
       "",
       "  ┌──────────────────────────────┬────────────┬────────────┐",
       "  │ Metric                       │  Verifier  │   Judge    │",
       "  ├──────────────────────────────┼────────────┼────────────┤",
-      _row("Overall accuracy", self.verifier_accuracy, self.judge_accuracy),
-      _row(
+      _format_row("Overall accuracy", self.verifier_accuracy, self.judge_accuracy),
+      _format_row(
         "Accuracy on hard tasks",
         self.verifier_accuracy_on_hard(),
         self.judge_accuracy_on_hard(),
       ),
-      _row(
+      _format_row(
         "Accuracy on easy tasks",
         self.verifier_accuracy_on_easy(),
         self.judge_accuracy_on_easy(),
       ),
-      _row(
+      _format_row(
         "Wins (lower oracle gap)",
         self.verifier_wins_count / max(record_count, 1),
         self.judge_wins_count / max(record_count, 1),
-        fmt="count",
+        format_type="count",
         verifier_wins=self.verifier_wins_count,
         judge_wins=self.judge_wins_count,
       ),
       "  ├──────────────────────────────┼────────────┼────────────┤",
-      _row(
+      _format_row(
         "Avg elapsed / task (s)",
-        self._avg_elapsed(StrategyType.VERIFIER),
-        self._avg_elapsed(StrategyType.JUDGE),
-        fmt="time",
+        self._average_elapsed(StrategyType.VERIFIER),
+        self._average_elapsed(StrategyType.JUDGE),
+        format_type="time",
       ),
       "  └──────────────────────────────┴────────────┴────────────┘",
       "",
-      f"  Average hardness score  : {self.avg_hardness:.3f}",
+      f"  Average hardness score  : {self.average_hardness:.3f}",
       f"  Strategy agreement rate : {self._agreement_rate():.1%}",
       f"  Ties                    : {self.tie_count}",
-      bar,
+      divider,
       "",
     ]
     return "\n".join(lines)
@@ -187,13 +187,13 @@ class HarnessReport:
 
     return "\n".join(rows)
 
-  def _avg_elapsed(self, strategy: StrategyType) -> float:
+  def _average_elapsed(self, strategy: StrategyType) -> float:
     if not self.task_records:
       return 0.0
     if strategy == StrategyType.VERIFIER:
-      values = [record.elapsed_verifier_s for record in self.task_records]
+      values = [record.elapsed_verifier_seconds for record in self.task_records]
     else:
-      values = [record.elapsed_judge_s for record in self.task_records]
+      values = [record.elapsed_judge_seconds for record in self.task_records]
     return statistics.mean(values) if values else 0.0
 
   def _agreement_rate(self) -> float:
@@ -324,13 +324,13 @@ class EvaluationHarness:
 
     score_var = _inter_strategy_score_spread(verifier_result, judge_result)
     disagreement = _pairwise_disagreement(trajectories, verifier_result, judge_result)
-    avg_conf = _avg_confidence(verifier_result, judge_result)
+    average_confidence = _average_confidence(verifier_result, judge_result)
     oracle_gap_verifier = _oracle_gap(oracle_id, verifier_result, trajectories)
     oracle_gap_judge = _oracle_gap(oracle_id, judge_result, trajectories)
 
     oracle_gap_component = (oracle_gap_verifier + oracle_gap_judge) / 2.0
 
-    confidence_hardness = 1.0 - avg_conf
+    confidence_hardness = 1.0 - average_confidence
 
     hardness = (
       self.hardness_weights["score_spread"] * score_var
@@ -345,13 +345,13 @@ class EvaluationHarness:
       hardness_score=hardness,
       score_spread=score_var,
       strategy_disagreement=disagreement,
-      avg_confidence=avg_conf,
+      average_confidence=average_confidence,
       oracle_gap_verifier=oracle_gap_verifier,
       oracle_gap_judge=oracle_gap_judge,
       verifier_result=verifier_result,
       judge_result=judge_result,
-      elapsed_verifier_s=elapsed_verifier,
-      elapsed_judge_s=elapsed_judge,
+      elapsed_verifier_seconds=elapsed_verifier,
+      elapsed_judge_seconds=elapsed_judge,
     )
 
   def _build_report(
@@ -362,20 +362,20 @@ class EvaluationHarness:
     if not records:
       return HarnessReport(
         hard_task_threshold=self.hard_task_threshold,
-        total_elapsed_s=total_elapsed,
+        total_elapsed_seconds=total_elapsed,
       )
 
     verifier_acc = _accuracy_on(records, StrategyType.VERIFIER)
     judge_acc = _accuracy_on(records, StrategyType.JUDGE)
-    avg_hardness = statistics.mean(record.hardness_score for record in records)
+    average_hardness = statistics.mean(record.hardness_score for record in records)
 
     return HarnessReport(
       task_records=records,
       verifier_accuracy=verifier_acc,
       judge_accuracy=judge_acc,
-      avg_hardness=avg_hardness,
+      average_hardness=average_hardness,
       hard_task_threshold=self.hard_task_threshold,
-      total_elapsed_s=total_elapsed,
+      total_elapsed_seconds=total_elapsed,
     )
 
 
@@ -480,7 +480,7 @@ def _pairwise_disagreement(
   return disagreements / len(pairs)
 
 
-def _avg_confidence(
+def _average_confidence(
   verifier_result: EvaluationResult,
   judge_result: EvaluationResult,
 ) -> float:
@@ -542,23 +542,23 @@ def _validate_hardness_weights(weights: dict[str, float]) -> None:
     )
 
 
-def _row(
+def _format_row(
   label: str,
   verifier_value: float,
   judge_value: float,
   *,
-  fmt: str = "pct",
+  format_type: str = "pct",
   verifier_wins: int = 0,
   judge_wins: int = 0,
 ) -> str:
-  """Format one row of the summary table; fmt is one of ``"pct"``, ``"time"``, ``"count"``."""
-  if fmt == "pct":
+  """Format one row of the summary table; format_type is one of ``"pct"``, ``"time"``, ``"count"``."""
+  if format_type == "pct":
     verifier_text = f"{verifier_value:.1%}"
     judge_text = f"{judge_value:.1%}"
-  elif fmt == "time":
+  elif format_type == "time":
     verifier_text = f"{verifier_value:.2f} s"
     judge_text = f"{judge_value:.2f} s"
-  elif fmt == "count":
+  elif format_type == "count":
     verifier_text = str(verifier_wins)
     judge_text = str(judge_wins)
   else:

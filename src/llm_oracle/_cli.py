@@ -251,14 +251,14 @@ def cmd_compare(args: argparse.Namespace) -> None:
   _info(f"Composite hardness score   : {record.hardness_score:.4f}")
   _info(f"Score spread               : {record.score_spread:.4f}")
   _info(f"Strategy disagreement      : {record.strategy_disagreement:.4f}")
-  _info(f"Average confidence         : {record.avg_confidence:.4f}")
+  _info(f"Average confidence         : {record.average_confidence:.4f}")
   _info(f"Oracle gap (verifier)      : {record.oracle_gap_verifier:.4f}")
   _info(f"Oracle gap (judge)         : {record.oracle_gap_judge:.4f}")
   _info(f"Strategies agree           : {record.strategies_agree}")
   _info(f"Verifier wins              : {record.verifier_wins}")
   _info(f"Judge wins                 : {record.judge_wins}")
-  _info(f"Elapsed (verifier)         : {record.elapsed_verifier_s:.3f} s")
-  _info(f"Elapsed (judge)            : {record.elapsed_judge_s:.3f} s")
+  _info(f"Elapsed (verifier)         : {record.elapsed_verifier_seconds:.3f} s")
+  _info(f"Elapsed (judge)            : {record.elapsed_judge_seconds:.3f} s")
   print()
 
 

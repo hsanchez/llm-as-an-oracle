@@ -41,7 +41,7 @@ class VerifierStrategy(BaseStrategy):
     model: LanguageModel,
     config: ScoringConfig,
     criteria: list[EvaluationCriterion],
-  ):
+  ) -> None:
     super().__init__(model, config, criteria)
     self._scale_info = self.get_scale_description()
 
@@ -206,17 +206,17 @@ class VerifierStrategy(BaseStrategy):
         result = self.score_trajectory(task, trajectory, criterion)
         criterion_scores[criterion.id].append(result.score)
 
-    avg_criterion_scores = {
+    average_criterion_scores = {
       criterion_id: sum(scores) / len(scores) for criterion_id, scores in criterion_scores.items()
     }
 
-    overall_score = self.aggregate_criterion_scores(avg_criterion_scores)
+    overall_score = self.aggregate_criterion_scores(average_criterion_scores)
 
     return ScoreResult(
       trajectory_id=trajectory.id,
       score=overall_score,
-      criterion_scores=avg_criterion_scores,
-      confidence=self._compute_confidence(avg_criterion_scores),
+      criterion_scores=average_criterion_scores,
+      confidence=self._compute_confidence(average_criterion_scores),
     )
 
   def _create_scoring_prompt(
@@ -348,10 +348,10 @@ Begin your analysis now."""
       if tag_logprobs:
         probs: dict[float, float] = {}
 
-        for tok_str, logprob in tag_logprobs:
-          tok = tok_str.strip()
-          if tok in valid_tokens:
-            raw_value = valid_tokens[tok]
+        for token_string, logprob in tag_logprobs:
+          token = token_string.strip()
+          if token in valid_tokens:
+            raw_value = valid_tokens[token]
             p = math.exp(logprob)
             probs[raw_value] = max(probs.get(raw_value, 0.0), p)
 
@@ -368,12 +368,12 @@ Begin your analysis now."""
     match = re.search(pattern, text or "", re.IGNORECASE)
 
     if match:
-      tok = match.group(1).strip()
-      raw_value = valid_tokens.get(tok)
+      token = match.group(1).strip()
+      raw_value = valid_tokens.get(token)
 
       if raw_value is None:
         for valid_token, candidate_value in valid_tokens.items():
-          if tok.lower() == valid_token.lower():
+          if token.lower() == valid_token.lower():
             raw_value = candidate_value
             break
 
@@ -393,8 +393,8 @@ Begin your analysis now."""
       return None
 
     text_so_far = ""
-    for i, tok in enumerate(tokens):
-      text_so_far += tok
+    for i, token in enumerate(tokens):
+      text_so_far += token
       if text_so_far.rstrip().endswith(tag):
         if i + 1 < len(position_logprobs):
           return position_logprobs[i + 1]
@@ -450,12 +450,12 @@ Begin your analysis now."""
     for key, pairwise_comparisons in comparison_map.items():
       trajectory_a_id, trajectory_b_id, _ = key
 
-      avg_score_a = sum(c.score_a for c in pairwise_comparisons) / len(pairwise_comparisons)
-      avg_score_b = sum(c.score_b for c in pairwise_comparisons) / len(pairwise_comparisons)
+      average_score_a = sum(c.score_a for c in pairwise_comparisons) / len(pairwise_comparisons)
+      average_score_b = sum(c.score_b for c in pairwise_comparisons) / len(pairwise_comparisons)
 
-      if avg_score_a > avg_score_b:
+      if average_score_a > average_score_b:
         wins[trajectory_a_id] += 1.0
-      elif avg_score_b > avg_score_a:
+      elif average_score_b > average_score_a:
         wins[trajectory_b_id] += 1.0
       else:
         wins[trajectory_a_id] += 0.5
