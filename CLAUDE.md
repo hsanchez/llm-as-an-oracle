@@ -6,8 +6,6 @@ See [AGENTS.md](AGENTS.md) for all shared instructions.
 
 AGENTS.md is the authoritative source for memory rules. Read it before any memory operation.
 Key rules reproduced here to prevent mistakes:
-- **"update memory"** → append one entry to `MEMORY_LOG.md` via `nu .claude/commands/memlog '<msg>'`
-- **"compress memory"** → rewrite `MEMORY.md` (repo root), remove compressed entries from `MEMORY_LOG.md`
 - **Never write to** `~/.claude/projects/*/memory/MEMORY.md` when a memory discipline is specified in this file or in `AGENTS.md`.
 
 ## Claude-Specific Notes
