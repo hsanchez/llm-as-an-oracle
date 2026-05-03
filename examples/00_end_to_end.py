@@ -365,7 +365,7 @@ for t, trajs in tasks_and_trajectories:
   )
   print(
     f"    verifiable_kw_density={signals.verifiable_keyword_density:.3f}"
-    f"  judgement_kw_density={signals.judgement_keyword_density:.3f}"
+    f"  judgment_kw_density={signals.judgment_keyword_density:.3f}"
   )
 
 print("\n# Router audit log")

@@ -462,14 +462,14 @@ class StubProvider(BaseProvider):
     if not others:
       return {target: 1.0}
 
-    n_neighbours = min(self._rng.randint(3, 8), len(others))
-    neighbours = self._rng.sample(others, n_neighbours)
-    per_neighbour = remaining / n_neighbours
+    n_neighbors = min(self._rng.randint(3, 8), len(others))
+    neighbors = self._rng.sample(others, n_neighbors)
+    per_neighbor = remaining / n_neighbors
 
     dist: dict[str, float] = {token: 0.0 for token in alphabet}
     dist[target] = peak
-    for neighbour in neighbours:
-      dist[neighbour] = per_neighbour
+    for neighbor in neighbors:
+      dist[neighbor] = per_neighbor
 
     return dist
 

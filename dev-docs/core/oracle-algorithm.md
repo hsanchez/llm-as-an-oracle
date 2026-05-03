@@ -73,7 +73,7 @@ The default signals are:
 - `trajectory_count`
 - `stated_difficulty`
 - `verifiable_keyword_density`
-- `judgement_keyword_density`
+- `judgment_keyword_density`
 - `problem_length`
 - `output_available`
 - `prior_hardness`

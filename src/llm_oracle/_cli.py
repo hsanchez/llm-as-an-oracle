@@ -151,7 +151,7 @@ def cmd_route(args: argparse.Namespace) -> None:
       ("trajectory_count", signals.trajectory_count),
       ("stated_difficulty", signals.stated_difficulty),
       ("verifiable_keyword_density", signals.verifiable_keyword_density),
-      ("judgement_keyword_density", signals.judgement_keyword_density),
+      ("judgment_keyword_density", signals.judgment_keyword_density),
       ("problem_length (norm)", signals.problem_length),
       ("output_available", signals.output_available),
       ("prior_hardness", signals.prior_hardness),

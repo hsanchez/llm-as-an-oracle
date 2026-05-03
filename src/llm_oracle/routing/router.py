@@ -52,17 +52,15 @@ _VERIFIABLE_KEYWORDS: frozenset[str] = frozenset(
   }
 )
 
-_JUDGEMENT_KEYWORDS: frozenset[str] = frozenset(
+_JUDGMENT_KEYWORDS: frozenset[str] = frozenset(
   {
     "explain",
-    "summarise",
     "summarize",
     "describe",
     "discuss",
     "argue",
     "essay",
     "compare",
-    "analyse",
     "analyze",
     "review",
     "critique",
@@ -96,7 +94,7 @@ class RoutingSignals:
   trajectory_count: int = 1
   stated_difficulty: float = 0.5
   verifiable_keyword_density: float = 0.0
-  judgement_keyword_density: float = 0.0
+  judgment_keyword_density: float = 0.0
   problem_length: float = 0.0
   output_available: float = 0.0
   prior_hardness: float | None = None
@@ -189,7 +187,7 @@ class KeywordDomainPolicy(RoutingPolicy):
   """Classify the task domain from problem-statement keywords.
 
   * High density of *verifiable* keywords (code, algorithm, …) → verifier.
-  * High density of *judgement* keywords (explain, analyse, …) → judge.
+  * High density of *judgment* keywords (explain, analyze, …) → judge.
   * Mixed / ambiguous → low-confidence judge (default).
   """
 
@@ -203,8 +201,8 @@ class KeywordDomainPolicy(RoutingPolicy):
     signals: RoutingSignals,
   ) -> PolicyVote:
     verifiable_density = signals.verifiable_keyword_density
-    judgement_density = signals.judgement_keyword_density
-    gap = verifiable_density - judgement_density
+    judgment_density = signals.judgment_keyword_density
+    gap = verifiable_density - judgment_density
 
     if gap > 0.05:
       confidence = min(0.95, 0.6 + gap * 2.0)
@@ -213,7 +211,7 @@ class KeywordDomainPolicy(RoutingPolicy):
         preferred=StrategyType.VERIFIER,
         confidence=confidence,
         weight=self.weight,
-        signals_used=["verifiable_keyword_density", "judgement_keyword_density"],
+        signals_used=["verifiable_keyword_density", "judgment_keyword_density"],
         reasoning=(
           f"Problem statement has stronger verifiable-domain signal "
           f"(Δ={gap:.2f}); routing to verifier."
@@ -227,7 +225,7 @@ class KeywordDomainPolicy(RoutingPolicy):
         preferred=StrategyType.JUDGE,
         confidence=confidence,
         weight=self.weight,
-        signals_used=["verifiable_keyword_density", "judgement_keyword_density"],
+        signals_used=["verifiable_keyword_density", "judgment_keyword_density"],
         reasoning=(
           f"Problem statement has stronger open-ended-domain signal "
           f"(Δ={gap:.2f}); routing to judge."
@@ -239,7 +237,7 @@ class KeywordDomainPolicy(RoutingPolicy):
       preferred=StrategyType.JUDGE,
       confidence=0.52,
       weight=self.weight,
-      signals_used=["verifiable_keyword_density", "judgement_keyword_density"],
+      signals_used=["verifiable_keyword_density", "judgment_keyword_density"],
       reasoning="Keyword signals are ambiguous; defaulting to judge.",
     )
 
@@ -592,11 +590,11 @@ class SignalExtractor:
     words = set(re.findall(r"\b\w+\b", text))
 
     verifiable_matches = len(words & _VERIFIABLE_KEYWORDS)
-    judgement_matches = len(words & _JUDGEMENT_KEYWORDS)
-    total_checked = len(_VERIFIABLE_KEYWORDS | _JUDGEMENT_KEYWORDS)
+    judgment_matches = len(words & _JUDGMENT_KEYWORDS)
+    total_checked = len(_VERIFIABLE_KEYWORDS | _JUDGMENT_KEYWORDS)
 
     verifiable_density = verifiable_matches / total_checked if total_checked else 0.0
-    judgement_density = judgement_matches / total_checked if total_checked else 0.0
+    judgment_density = judgment_matches / total_checked if total_checked else 0.0
 
     has_output = float(any(t.output for t in trajectories))
 
@@ -613,7 +611,7 @@ class SignalExtractor:
       trajectory_count=len(trajectories),
       stated_difficulty=stated_difficulty,
       verifiable_keyword_density=verifiable_density,
-      judgement_keyword_density=judgement_density,
+      judgment_keyword_density=judgment_density,
       problem_length=min(len(task.problem_statement), 2000) / 2000.0,
       output_available=has_output,
       prior_hardness=prior_hardness,

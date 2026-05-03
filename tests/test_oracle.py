@@ -1028,14 +1028,14 @@ class TestSignalExtractor:
     signals = extractor.extract(code_task, trajectories)
     assert signals.verifiable_keyword_density > 0.0
 
-  def test_judgement_keyword_density_for_essay_task(
+  def test_judgment_keyword_density_for_essay_task(
     self,
     extractor: SignalExtractor,
     essay_task: Task,
     trajectories: list[Trajectory],
   ) -> None:
     signals = extractor.extract(essay_task, trajectories)
-    assert signals.judgement_keyword_density > 0.0
+    assert signals.judgment_keyword_density > 0.0
 
   def test_prior_hardness_passed_through(
     self, extractor: SignalExtractor, easy_task: Task, trajectories: list[Trajectory]
@@ -1122,7 +1122,7 @@ class TestRoutingPolicies:
   ) -> None:
     signals = RoutingSignals(
       verifiable_keyword_density=0.1,
-      judgement_keyword_density=0.1,
+      judgment_keyword_density=0.1,
     )
     policy = KeywordDomainPolicy()
     vote = policy.vote(easy_task, trajectories, signals)
@@ -1259,7 +1259,7 @@ class TestPolicyChain:
       trajectory_count=3,
       stated_difficulty=1.0,
       verifiable_keyword_density=0.3,
-      judgement_keyword_density=0.0,
+      judgment_keyword_density=0.0,
       output_available=1.0,
       prior_hardness=0.9,
     )
@@ -1285,7 +1285,7 @@ class TestPolicyChain:
       trajectory_count=1,
       stated_difficulty=0.0,
       verifiable_keyword_density=0.0,
-      judgement_keyword_density=0.3,
+      judgment_keyword_density=0.3,
       output_available=0.0,
       prior_hardness=0.1,
     )
