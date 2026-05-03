@@ -438,7 +438,7 @@ for trajectory_id, score_result in sorted(
 # - execution output
 # - trajectory count
 #
-# The canonical algorithm description lives in `docs/oracle-algorithm.md`.
+# The canonical algorithm description lives in `dev-docs/core/oracle-algorithm.md`.
 # This tutorial focuses on how to use the router rather than specifying the
 # routing logic in full.
 

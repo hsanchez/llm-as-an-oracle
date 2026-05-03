@@ -100,7 +100,7 @@ criteria = [
 ]
 
 print("Model:", model.model_id)
-print("Criteria:", [c.name for c in criteria])
+print("Criteria:", [criterion.name for criterion in criteria])
 
 
 # %% [markdown]
@@ -230,7 +230,7 @@ trajectories = [
 ]
 
 print("Task:", task.id)
-print("Trajectories:", [t.id for t in trajectories])
+print("Trajectories:", [trajectory.id for trajectory in trajectories])
 
 
 # %% [markdown]
@@ -289,11 +289,11 @@ verifier_result = verifier.evaluate(task, trajectories)
 
 print("Verifier — full evaluation:")
 print("  best trajectory:", verifier_result.best_trajectory_id)
-for tid, sr in sorted(
+for trajectory_id, score_result in sorted(
   verifier_result.trajectory_scores.items(),
   key=lambda item: -item[1].score,
 ):
-  print(f"  {tid}: score={sr.score:.4f}  confidence={sr.confidence:.4f}")
+  print(f"  {trajectory_id}: score={score_result.score:.4f}  confidence={score_result.confidence:.4f}")
 
 
 # %% [markdown]
@@ -339,11 +339,11 @@ judge_result = judge.evaluate(task, trajectories)
 
 print("Judge — full evaluation:")
 print("  best trajectory:", judge_result.best_trajectory_id)
-for tid, sr in sorted(
+for trajectory_id, score_result in sorted(
   judge_result.trajectory_scores.items(),
   key=lambda item: -item[1].score,
 ):
-  print(f"  {tid}: score={sr.score:.4f}  confidence={sr.confidence:.4f}")
+  print(f"  {trajectory_id}: score={score_result.score:.4f}  confidence={score_result.confidence:.4f}")
 
 
 # %% [markdown]

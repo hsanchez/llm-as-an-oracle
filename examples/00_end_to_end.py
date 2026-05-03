@@ -6,8 +6,8 @@ Swap StubProvider for OpenAIProvider, AnthropicProvider, or GeminiProvider
 and set the corresponding API key environment variable when you are ready
 to use a real model.
 
-    cd llm-as-an-oracle
-    uv run python examples/end_to_end.py
+    cd llm-as-oracle
+    uv run python examples/00_end_to_end.py
 """
 
 from __future__ import annotations
@@ -141,18 +141,20 @@ print(f"  score      : {score.score:.4f}  (normalized 0-1)")
 print(f"  confidence : {score.confidence:.4f}")
 
 print("\n# Verifier — pairwise comparison of two trajectories")
-comp = verifier.compare_trajectories(task, trajectories[0], trajectories[2], criteria[0])
-print(f"  score_A ({comp.trajectory_a_id}) : {comp.score_a:.4f}")
-print(f"  score_B ({comp.trajectory_b_id}) : {comp.score_b:.4f}")
-print(f"  winner    : {comp.winner or 'tie'}")
-print(f"  confidence: {comp.confidence:.4f}")
+comparison = verifier.compare_trajectories(task, trajectories[0], trajectories[2], criteria[0])
+print(f"  score_A ({comparison.trajectory_a_id}) : {comparison.score_a:.4f}")
+print(f"  score_B ({comparison.trajectory_b_id}) : {comparison.score_b:.4f}")
+print(f"  winner    : {comparison.winner or 'tie'}")
+print(f"  confidence: {comparison.confidence:.4f}")
 
 print("\n# Verifier — tournament evaluation across all trajectories")
-v_result = verifier.evaluate(task, trajectories)
-print(f"  best trajectory : {v_result.best_trajectory_id}")
-print(f"  pairwise calls  : {len(v_result.pairwise_comparisons)}")
-for tid, sr in sorted(v_result.trajectory_scores.items(), key=lambda x: -x[1].score):
-  print(f"  {tid:<16s}  score={sr.score:.4f}")
+verifier_result = verifier.evaluate(task, trajectories)
+print(f"  best trajectory : {verifier_result.best_trajectory_id}")
+print(f"  pairwise calls  : {len(verifier_result.pairwise_comparisons)}")
+for trajectory_id, score_result in sorted(
+  verifier_result.trajectory_scores.items(), key=lambda item: -item[1].score
+):
+  print(f"  {trajectory_id:<16s}  score={score_result.score:.4f}")
 
 
 # ---------------------------------------------------------------------------
@@ -170,22 +172,24 @@ judge = JudgeStrategy(
 )
 
 print("\n# Judge — pointwise score for one trajectory and criterion")
-j_score = judge.score_trajectory(task, trajectories[0], criteria[1])
-print(f"  trajectory : {j_score.trajectory_id}")
-print(f"  score      : {j_score.score:.4f}  (raw: {j_score.raw_score})")
-print(f"  confidence : {j_score.confidence:.4f}")
+judge_score = judge.score_trajectory(task, trajectories[0], criteria[1])
+print(f"  trajectory : {judge_score.trajectory_id}")
+print(f"  score      : {judge_score.score:.4f}  (raw: {judge_score.raw_score})")
+print(f"  confidence : {judge_score.confidence:.4f}")
 
 print("\n# Judge — pairwise comparison (swap_pairwise cancels positional bias)")
-j_comp = judge.compare_trajectories(task, trajectories[0], trajectories[1], criteria[0])
-print(f"  score_A ({j_comp.trajectory_a_id}) : {j_comp.score_a:.4f}")
-print(f"  score_B ({j_comp.trajectory_b_id}) : {j_comp.score_b:.4f}")
-print(f"  winner    : {j_comp.winner or 'tie'}")
+judge_comparison = judge.compare_trajectories(task, trajectories[0], trajectories[1], criteria[0])
+print(f"  score_A ({judge_comparison.trajectory_a_id}) : {judge_comparison.score_a:.4f}")
+print(f"  score_B ({judge_comparison.trajectory_b_id}) : {judge_comparison.score_b:.4f}")
+print(f"  winner    : {judge_comparison.winner or 'tie'}")
 
 print("\n# Judge — full evaluation across all trajectories")
-j_result = judge.evaluate(task, trajectories)
-print(f"  best trajectory : {j_result.best_trajectory_id}")
-for tid, sr in sorted(j_result.trajectory_scores.items(), key=lambda x: -x[1].score):
-  print(f"  {tid:<16s}  score={sr.score:.4f}")
+judge_result = judge.evaluate(task, trajectories)
+print(f"  best trajectory : {judge_result.best_trajectory_id}")
+for trajectory_id, score_result in sorted(
+  judge_result.trajectory_scores.items(), key=lambda item: -item[1].score
+):
+  print(f"  {trajectory_id:<16s}  score={score_result.score:.4f}")
 
 
 # ---------------------------------------------------------------------------
@@ -298,10 +302,10 @@ print(f"    judge    accuracy : {report.judge_accuracy_on_easy():.1%}")
 router = OracleRouter.default(verifier, judge, confidence_threshold=0.50)
 
 print("\n# Router — route each task (no prior hardness)")
-for t, trajs in tasks_and_trajectories:
-  decision = router.route(t, trajs)
+for example_task, candidate_trajectories in tasks_and_trajectories:
+  decision = router.route(example_task, candidate_trajectories)
   print(
-    f"  {t.id:<22s}  -> {decision.selected_strategy.value:<9s}"
+    f"  {example_task.id:<22s}  -> {decision.selected_strategy.value:<9s}"
     f"  conf={decision.confidence:.3f}  ({decision.elapsed_ms:.1f} ms)"
   )
 
@@ -310,12 +314,12 @@ for record in report.task_records:
   router.update_hardness(record.task_id, record.hardness_score)
 
 print("\n# Router — same tasks re-routed with prior hardness from the harness")
-for t, trajs in tasks_and_trajectories:
-  decision = router.route(t, trajs)
-  ph = decision.signals.prior_hardness
+for example_task, candidate_trajectories in tasks_and_trajectories:
+  decision = router.route(example_task, candidate_trajectories)
+  prior_hardness = decision.signals.prior_hardness
   print(
-    f"  {t.id:<22s}  -> {decision.selected_strategy.value:<9s}"
-    f"  conf={decision.confidence:.3f}  prior_hardness={ph:.3f}"
+    f"  {example_task.id:<22s}  -> {decision.selected_strategy.value:<9s}"
+    f"  conf={decision.confidence:.3f}  prior_hardness={prior_hardness:.3f}"
   )
 
 
@@ -355,9 +359,9 @@ print(f"  best traj  : {result.best_trajectory_id}")
 
 print("\n# SignalExtractor — routing signals for each task")
 extractor = SignalExtractor()
-for t, trajs in tasks_and_trajectories:
-  signals = extractor.extract(t, trajs)
-  print(f"  {t.id}")
+for example_task, candidate_trajectories in tasks_and_trajectories:
+  signals = extractor.extract(example_task, candidate_trajectories)
+  print(f"  {example_task.id}")
   print(
     f"    has_ground_truth={signals.has_ground_truth:.0f}"
     f"  has_test_cases={signals.has_test_cases:.0f}"

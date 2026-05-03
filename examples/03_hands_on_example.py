@@ -252,10 +252,14 @@ print("  traj-latent-bug:  top_k([5, 5, 3], 2) → [5, 3]  ✗  (should be [5, 5
 verifier = VerifierStrategy(stub, config, criteria)
 
 print("\n# Verifier — full evaluation:")
-v_result = verifier.evaluate(task, trajectories)
-print(f"  best trajectory: {v_result.best_trajectory_id}")
-for tid, sr in sorted(v_result.trajectory_scores.items(), key=lambda x: -x[1].score):
-  print(f"  {tid:<20s}  score={sr.score:.4f}  confidence={sr.confidence:.4f}")
+verifier_result = verifier.evaluate(task, trajectories)
+print(f"  best trajectory: {verifier_result.best_trajectory_id}")
+for trajectory_id, score_result in sorted(
+  verifier_result.trajectory_scores.items(), key=lambda item: -item[1].score
+):
+  print(
+    f"  {trajectory_id:<20s}  score={score_result.score:.4f}  confidence={score_result.confidence:.4f}"
+  )
 
 print()
 print("  The Verifier correctly identifies the ranking:")
@@ -311,10 +315,14 @@ judge = JudgeStrategy(
 )
 
 print("\n# Judge — full evaluation:")
-j_result = judge.evaluate(task, trajectories)
-print(f"  best trajectory: {j_result.best_trajectory_id}")
-for tid, sr in sorted(j_result.trajectory_scores.items(), key=lambda x: -x[1].score):
-  print(f"  {tid:<20s}  score={sr.score:.4f}  confidence={sr.confidence:.4f}")
+judge_result = judge.evaluate(task, trajectories)
+print(f"  best trajectory: {judge_result.best_trajectory_id}")
+for trajectory_id, score_result in sorted(
+  judge_result.trajectory_scores.items(), key=lambda item: -item[1].score
+):
+  print(
+    f"  {trajectory_id:<20s}  score={score_result.score:.4f}  confidence={score_result.confidence:.4f}"
+  )
 
 print()
 print("  The Judge produces equal scores — without test-case evidence it")
@@ -443,9 +451,9 @@ print(ops_decision.reasoning)
 # The most informative metric here is `strategy_disagreement`: how often do
 # Judge and Verifier rank the same pair of trajectories differently?
 #
-# High disagreement on the coding task is expected — the Verifier has test
-# evidence to differentiate candidates; the Judge (stub mode) produces ties.
-# That gap is exactly when the Oracle routing decision carries the most value:
+# Score spread on the coding task is expected — the Verifier has test evidence
+# to differentiate candidates while the Judge (stub mode) produces ties. That
+# gap is exactly when the Oracle routing decision carries the most value:
 # picking the Verifier on a task where the Judge is blind.
 
 # %%
