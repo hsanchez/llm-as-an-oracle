@@ -1,9 +1,11 @@
 """Core data models and types for the LLM Oracle system."""
 
+from __future__ import annotations
+
 import enum
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 
 class TaskDifficulty(enum.Enum):
@@ -20,6 +22,46 @@ class StrategyType(enum.Enum):
 
   VERIFIER = "verifier"
   JUDGE = "judge"
+
+
+@dataclass(frozen=True)
+class HumanRequest:
+  """Request for host-managed human input."""
+
+  id: str
+  task_id: str
+  question: str
+  reason: str
+  urgency: str = "normal"
+  metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class HumanResponse:
+  """Resolved human input for a request."""
+
+  request_id: str
+  answer: str
+  responder_id: str | None = None
+  metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class HumanResponsePending:
+  """Handle for asynchronous human escalation."""
+
+  request_id: str
+  external_id: str | None = None
+  message: str = ""
+  metadata: dict[str, Any] = field(default_factory=dict)
+
+
+class HumanOracle(Protocol):
+  """Boundary implemented by host applications for human escalation."""
+
+  def ask(self, request: HumanRequest) -> HumanResponse | HumanResponsePending:
+    """Ask the configured human source for input."""
+    ...
 
 
 @dataclass(frozen=True)
@@ -143,3 +185,5 @@ class ScoringConfig:
 TrajectoryList = Sequence[Trajectory]
 ScoreDict = dict[str, float]
 CriterionList = Sequence[EvaluationCriterion]
+
+

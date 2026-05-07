@@ -10,6 +10,7 @@ Tests cover:
   - All built-in RoutingPolicy implementations
   - PolicyChain: aggregation, confidence threshold, fallback
   - OracleRouter: route(), evaluate(), factory constructors, audit log
+  - Human escalation: uncertainty-based post-evaluation escalation
 
 Run with:
     pytest tests/test_oracle.py -v
@@ -26,6 +27,9 @@ from llm_oracle import (
   EvaluationCriterion,
   EvaluationHarness,
   EvaluationResult,
+  HumanRequest,
+  HumanResponse,
+  HumanResponsePending,
   JudgeStrategy,
   ModelConfig,
   OpenAIProvider,
@@ -257,6 +261,39 @@ class TestCoreModels:
     config = ModelConfig(model_id="gpt-4o", provider="openai")
     assert config.temperature == 1.0
     assert config.additional_params == {}
+
+  def test_human_request_defaults(self) -> None:
+    request = HumanRequest(
+      id="human-1",
+      task_id="task-1",
+      question="Should empty input return an empty result?",
+      reason="The task does not specify empty input behavior.",
+    )
+
+    assert request.urgency == "normal"
+    assert request.metadata == {}
+
+  def test_human_response_links_to_request(self) -> None:
+    response = HumanResponse(
+      request_id="human-1",
+      answer="Return an empty result.",
+      responder_id="owner",
+    )
+
+    assert response.request_id == "human-1"
+    assert response.answer == "Return an empty result."
+    assert response.responder_id == "owner"
+
+  def test_human_response_pending_can_track_external_request(self) -> None:
+    pending = HumanResponsePending(
+      request_id="human-1",
+      external_id="slack-123",
+      message="Waiting for task owner.",
+    )
+
+    assert pending.request_id == "human-1"
+    assert pending.external_id == "slack-123"
+    assert pending.message == "Waiting for task owner."
 
 
 class TestStubProvider:
@@ -1654,6 +1691,224 @@ class TestProviderRegistry:
         sys.modules.pop("openai", None)
       else:
         sys.modules["openai"] = original
+
+
+class TestHumanEscalation:
+  """Tests for uncertainty-based human oracle escalation in OracleRouter.evaluate()."""
+
+  def _stub_oracle(self, answer: str):
+    class _StubHumanOracle:
+      def ask(self, request: HumanRequest) -> HumanResponse:
+        return HumanResponse(request_id=request.id, answer=answer, responder_id="test-user")
+
+    return _StubHumanOracle()
+
+  @pytest.fixture()
+  def task_with_clarifications(self) -> Task:
+    return Task(
+      id="ambiguous-task",
+      description="Evaluate a policy summary.",
+      problem_statement="Ambiguous policy statement with no clear ground truth.",
+      difficulty=TaskDifficulty.MEDIUM,
+      metadata={
+        "human_clarifications": {
+          "strict": {
+            "problem_statement": "Use the strict interpretation.",
+            "ground_truth": "Strict answer.",
+            "test_cases": [{"input": "x", "expected": "strict"}],
+          },
+          "lenient": {
+            "problem_statement": "Use the lenient interpretation.",
+            "ground_truth": "Lenient answer.",
+            "test_cases": [{"input": "x", "expected": "lenient"}],
+          },
+        }
+      },
+    )
+
+  @pytest.fixture()
+  def two_trajectories(self) -> list[Trajectory]:
+    return [
+      Trajectory("t1", "ambiguous-task", "Strict interpretation summary."),
+      Trajectory("t2", "ambiguous-task", "Lenient interpretation summary."),
+    ]
+
+  def test_default_stores_human_oracle(
+    self, verifier: VerifierStrategy, judge: JudgeStrategy
+  ) -> None:
+    oracle = self._stub_oracle("strict")
+    router = OracleRouter.default(verifier, judge, human_oracle=oracle)
+    assert router._human_oracle is oracle
+
+  def test_escalation_fires_when_uncertain(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    task_with_clarifications: Task,
+    two_trajectories: list[Trajectory],
+  ) -> None:
+    # uncertainty_threshold=1.1 guarantees spread < threshold for any [0,1] scores
+    router = OracleRouter.default(
+      verifier,
+      judge,
+      human_oracle=self._stub_oracle("strict"),
+      uncertainty_threshold=1.1,
+    )
+    _, decision = router.evaluate(task_with_clarifications, two_trajectories)
+    assert decision.metadata.get("human_escalated") is True
+
+  def test_escalation_skips_when_spread_sufficient(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    task_with_clarifications: Task,
+    two_trajectories: list[Trajectory],
+  ) -> None:
+    # uncertainty_threshold=0.0 means spread must be negative — never fires
+    router = OracleRouter.default(
+      verifier,
+      judge,
+      human_oracle=self._stub_oracle("strict"),
+      uncertainty_threshold=0.0,
+    )
+    _, decision = router.evaluate(task_with_clarifications, two_trajectories)
+    assert not decision.metadata.get("human_escalated")
+
+  def test_escalation_skips_when_no_human_oracle(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    task_with_clarifications: Task,
+    two_trajectories: list[Trajectory],
+  ) -> None:
+    router = OracleRouter.default(verifier, judge, uncertainty_threshold=1.1)
+    _, decision = router.evaluate(task_with_clarifications, two_trajectories)
+    assert not decision.metadata.get("human_escalated")
+
+  def test_single_trajectory_never_escalates(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    router = OracleRouter.default(
+      verifier,
+      judge,
+      human_oracle=self._stub_oracle("anything"),
+      uncertainty_threshold=1.1,
+    )
+    _, decision = router.evaluate(easy_task, [trajectories[0]])
+    assert not decision.metadata.get("human_escalated")
+
+  def test_pre_authored_clarifications_apply_field_overrides(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    task_with_clarifications: Task,
+    two_trajectories: list[Trajectory],
+  ) -> None:
+    router = OracleRouter.default(
+      verifier,
+      judge,
+      human_oracle=self._stub_oracle("strict"),
+      uncertainty_threshold=1.1,
+    )
+    _, decision = router.evaluate(task_with_clarifications, two_trajectories)
+    assert decision.metadata.get("human_response") == "strict"
+    assert decision.metadata.get("human_responder_id") == "test-user"
+
+  def test_free_form_answer_appends_to_problem_statement(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    two_trajectories: list[Trajectory],
+  ) -> None:
+    task_no_clarifications = Task(
+      id="ambiguous-task",
+      description="Evaluate a policy.",
+      problem_statement="Ambiguous policy with no pre-authored clarifications.",
+      difficulty=TaskDifficulty.MEDIUM,
+    )
+    router = OracleRouter.default(
+      verifier,
+      judge,
+      human_oracle=self._stub_oracle("use strict rules"),
+      uncertainty_threshold=1.1,
+    )
+    result, decision = router.evaluate(task_no_clarifications, two_trajectories)
+    assert decision.metadata.get("human_escalated") is True
+    assert decision.metadata.get("human_response") == "use strict rules"
+    assert result.task_id == task_no_clarifications.id
+
+  def test_unknown_answer_key_raises_value_error(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    task_with_clarifications: Task,
+    two_trajectories: list[Trajectory],
+  ) -> None:
+    router = OracleRouter.default(
+      verifier,
+      judge,
+      human_oracle=self._stub_oracle("unknown-key"),
+      uncertainty_threshold=1.1,
+    )
+    with pytest.raises(ValueError, match="unknown-key"):
+      router.evaluate(task_with_clarifications, two_trajectories)
+
+  def test_pending_response_raises_runtime_error(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    task_with_clarifications: Task,
+    two_trajectories: list[Trajectory],
+  ) -> None:
+    class _PendingOracle:
+      def ask(self, request: HumanRequest) -> HumanResponsePending:
+        return HumanResponsePending(request_id=request.id, external_id="slack-42")
+
+    router = OracleRouter.default(
+      verifier,
+      judge,
+      human_oracle=_PendingOracle(),
+      uncertainty_threshold=1.1,
+    )
+    with pytest.raises(RuntimeError, match="HumanResponsePending"):
+      router.evaluate(task_with_clarifications, two_trajectories)
+
+  def test_escalation_metadata_in_decision(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    task_with_clarifications: Task,
+    two_trajectories: list[Trajectory],
+  ) -> None:
+    router = OracleRouter.default(
+      verifier,
+      judge,
+      human_oracle=self._stub_oracle("lenient"),
+      uncertainty_threshold=1.1,
+    )
+    _, decision = router.evaluate(task_with_clarifications, two_trajectories)
+    assert decision.metadata.get("human_escalated") is True
+    assert "human_request_id" in decision.metadata
+
+  def test_answer_key_normalized_before_lookup(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    task_with_clarifications: Task,
+    two_trajectories: list[Trajectory],
+  ) -> None:
+    router = OracleRouter.default(
+      verifier,
+      judge,
+      human_oracle=self._stub_oracle("  Strict  "),
+      uncertainty_threshold=1.1,
+    )
+    _, decision = router.evaluate(task_with_clarifications, two_trajectories)
+    assert decision.metadata.get("human_escalated") is True
 
 
 class TestIntegration:
