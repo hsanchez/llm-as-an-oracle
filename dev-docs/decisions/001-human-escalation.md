@@ -85,6 +85,13 @@ testing and demo convenience — they map normalized answer keys to task field
 overrides. When absent, the human's free-form answer is appended to the
 problem statement.
 
+## Alternatives Considered
+
+**Logprobs margin**: flag escalation when the gap between the top two token
+logprobs is small (the model was "torn" at generation time). This works for
+single-step classification but does not apply here — uncertainty is measured
+across multiple evaluated trajectories, not within a single token prediction.
+
 ## Consequences
 
 Judge and Verifier remain the only evaluation strategies.
