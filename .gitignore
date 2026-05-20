@@ -15,3 +15,5 @@ MEMORY_LOG.md
 # Local environment — never commit real keys
 .env
 .env.local
+
+PLAN.md

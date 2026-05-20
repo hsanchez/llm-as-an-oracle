@@ -4,13 +4,20 @@ Policies are deterministic and O(1); each casts a soft vote aggregated by a
 PolicyChain. Every decision is fully auditable via DetailedRoutingDecision.
 """
 
+from __future__ import annotations
+
 import abc
+import dataclasses
 import re
 import time
 from dataclasses import dataclass, field
 
 from llm_oracle.core.models import (
   EvaluationResult,
+  HumanOracle,
+  HumanRequest,
+  HumanResponse,
+  HumanResponsePending,
   RoutingDecision,
   StrategyType,
   Task,
@@ -20,6 +27,7 @@ from llm_oracle.core.models import (
 from llm_oracle.core.strategy import BaseStrategy
 
 _CONFIDENCE_THRESHOLD: float = 0.60
+_UNCERTAINTY_THRESHOLD: float = 0.10
 
 _VERIFIABLE_KEYWORDS: frozenset[str] = frozenset(
   {
@@ -637,12 +645,16 @@ class OracleRouter:
     policy_chain: PolicyChain,
     signal_extractor: SignalExtractor | None = None,
     hardness_cache: dict[str, float] | None = None,
+    human_oracle: HumanOracle | None = None,
+    uncertainty_threshold: float = _UNCERTAINTY_THRESHOLD,
   ) -> None:
     self._verifier = verifier
     self._judge = judge
     self._chain = policy_chain
     self._extractor = signal_extractor or SignalExtractor()
     self._hardness_cache: dict[str, float] = hardness_cache or {}
+    self._human_oracle = human_oracle
+    self._uncertainty_threshold = uncertainty_threshold
     self._decision_log: list[DetailedRoutingDecision] = []
 
   @classmethod
@@ -653,7 +665,9 @@ class OracleRouter:
     *,
     hardness_cache: dict[str, float] | None = None,
     confidence_threshold: float = _CONFIDENCE_THRESHOLD,
-  ) -> "OracleRouter":
+    human_oracle: HumanOracle | None = None,
+    uncertainty_threshold: float = _UNCERTAINTY_THRESHOLD,
+  ) -> OracleRouter:
     """Create a router with the default six-policy chain.
 
     Policy weights: prior_hardness(1.8), ground_truth(2.0),
@@ -673,14 +687,21 @@ class OracleRouter:
       confidence_threshold=confidence_threshold,
       fallback_strategy=StrategyType.JUDGE,
     )
-    return cls(verifier, judge, chain, hardness_cache=hardness_cache)
+    return cls(
+      verifier,
+      judge,
+      chain,
+      hardness_cache=hardness_cache,
+      human_oracle=human_oracle,
+      uncertainty_threshold=uncertainty_threshold,
+    )
 
   @classmethod
   def verifier_only(
     cls,
     verifier: BaseStrategy,
     judge: BaseStrategy,
-  ) -> "OracleRouter":
+  ) -> OracleRouter:
     """Create a router that always selects the verifier (ablation mode)."""
 
     class _AlwaysVerifierPolicy(RoutingPolicy):
@@ -702,7 +723,7 @@ class OracleRouter:
     cls,
     verifier: BaseStrategy,
     judge: BaseStrategy,
-  ) -> "OracleRouter":
+  ) -> OracleRouter:
     """Create a router that always selects the judge (ablation mode)."""
 
     class _AlwaysJudgePolicy(RoutingPolicy):
@@ -726,14 +747,10 @@ class OracleRouter:
   ) -> DetailedRoutingDecision:
     """Compute a routing decision without running evaluation."""
     start_time = time.perf_counter()
-
     prior_hardness = self._hardness_cache.get(task.id)
     signals = self._extractor.extract(task, trajectories, prior_hardness=prior_hardness)
-
     strategy, confidence, votes, reasoning = self._chain.decide(task, trajectories, signals)
-
     elapsed_ms = (time.perf_counter() - start_time) * 1_000
-
     decision = DetailedRoutingDecision(
       task_id=task.id,
       selected_strategy=strategy,
@@ -743,7 +760,6 @@ class OracleRouter:
       signals=signals,
       elapsed_ms=elapsed_ms,
     )
-
     self._decision_log.append(decision)
     return decision
 
@@ -754,8 +770,14 @@ class OracleRouter:
   ) -> tuple[EvaluationResult, DetailedRoutingDecision]:
     """Route and evaluate a task; returns ``(EvaluationResult, DetailedRoutingDecision)``.
 
+    If a ``human_oracle`` is configured and the score spread across trajectories
+    falls below ``uncertainty_threshold``, the oracle asks the human for
+    clarification and re-evaluates with the clarified task.
+
     Raises:
       ValueError: If ``trajectories`` is empty.
+      ValueError: If a human answer does not match any clarification key.
+      RuntimeError: If the human oracle returns a pending (deferred) response.
     """
     if not trajectories:
       raise ValueError(f"Trajectory list for task '{task.id}' must be non-empty.")
@@ -764,14 +786,102 @@ class OracleRouter:
     strategy = self._resolve_strategy(decision.selected_strategy)
     result = strategy.evaluate(task, trajectories)
 
+    if self._human_oracle is not None and self._is_uncertain(result):
+      human_request = self._build_human_request(task, result)
+      response = self._human_oracle.ask(human_request)
+
+      if isinstance(response, HumanResponsePending):
+        raise RuntimeError(
+          f"Deferred human responses are not yet supported. "
+          f"Request {response.request_id!r} returned HumanResponsePending."
+        )
+
+      clarified_task = self._apply_clarification(task, response)
+      decision = self.route(clarified_task, trajectories)
+      strategy = self._resolve_strategy(decision.selected_strategy)
+      result = strategy.evaluate(clarified_task, trajectories)
+      decision.metadata.update(
+        {
+          "human_escalated": True,
+          "human_request_id": human_request.id,
+          "human_response": response.answer,
+          "human_responder_id": response.responder_id,
+        }
+      )
+
     return result, decision
+
+  def _is_uncertain(self, result: EvaluationResult) -> bool:
+    """Return True when score spread is below the uncertainty threshold."""
+    scores = [s.score for s in result.trajectory_scores.values()]
+    if len(scores) < 2:
+      return False
+    return (max(scores) - min(scores)) < self._uncertainty_threshold
+
+  def _build_human_request(self, task: Task, result: EvaluationResult) -> HumanRequest:
+    """Build a HumanRequest from an inconclusive evaluation result."""
+    sorted_scores = sorted(result.trajectory_scores.values(), key=lambda s: s.score, reverse=True)
+    spread = sorted_scores[0].score - sorted_scores[-1].score
+    reasoning_lines = [s.reasoning for s in sorted_scores[:2] if s.reasoning]
+    context = " ".join(reasoning_lines)
+    question = (
+      "The evaluation was inconclusive. Can you clarify the task requirements "
+      "or expected outcome?" + (f" Context: {context}" if context else "")
+    )
+    reason = (
+      f"Score spread {spread:.3f} below threshold {self._uncertainty_threshold}. "
+      f"Oracle cannot distinguish which trajectory best satisfies '{task.description}'."
+    )
+    return HumanRequest(
+      id=f"uncertainty-{task.id}",
+      task_id=task.id,
+      question=question,
+      reason=reason,
+    )
+
+  def _apply_clarification(self, task: Task, response: HumanResponse) -> Task:
+    """Return a new Task with the human's clarification applied.
+
+    If ``task.metadata`` contains a ``human_clarifications`` map, the response
+    answer is used as a lookup key and the matching overrides are applied as
+    field updates. Otherwise, the free-form answer is appended to
+    ``problem_statement``.
+
+    Raises:
+      ValueError: If a clarifications map exists but the answer key is absent.
+    """
+    _ALLOWED_FIELDS = {
+      "description",
+      "problem_statement",
+      "ground_truth",
+      "test_cases",
+      "difficulty",
+    }
+    clarifications: dict = task.metadata.get("human_clarifications", {})
+
+    if clarifications:
+      answer_key = response.answer.strip().lower()
+      if answer_key not in clarifications:
+        raise ValueError(
+          f"Human answer {answer_key!r} does not match any key in "
+          f"'human_clarifications'. Available: {sorted(clarifications)}"
+        )
+      overrides: dict = dict(clarifications[answer_key])
+      task_updates = {k: v for k, v in overrides.items() if k in _ALLOWED_FIELDS}
+      metadata = {**task.metadata, **(overrides.get("metadata") or {})}
+      return dataclasses.replace(task, **task_updates, metadata=metadata)
+
+    return dataclasses.replace(
+      task,
+      problem_statement=f"{task.problem_statement}\n\nHuman clarification: {response.answer}",
+    )
 
   def register_policy(
     self,
     policy: RoutingPolicy,
     *,
     position: int | None = None,
-  ) -> "OracleRouter":
+  ) -> OracleRouter:
     """Add a policy to the chain; returns ``self`` for fluent chaining."""
     policies = list(self._chain.policies)
     if position is None:
