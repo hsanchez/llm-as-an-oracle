@@ -498,6 +498,19 @@ class TestVerifierStrategy:
     assert result.strategy_type == StrategyType.VERIFIER
     assert len(result.pairwise_comparisons) == 0
 
+  def test_evaluate_single_trajectory_preserves_reasoning(
+    self,
+    verifier: VerifierStrategy,
+    easy_task: Task,
+    trajectories: list[Trajectory],
+    criteria: list[EvaluationCriterion],
+  ) -> None:
+    result = verifier.evaluate(easy_task, [trajectories[0]])
+    score_result = result.trajectory_scores[trajectories[0].id]
+
+    assert len(score_result.reasoning) > 0
+    assert f"[{criteria[0].name}]" in score_result.reasoning
+
   def test_evaluate_multiple_trajectories(
     self,
     verifier: VerifierStrategy,

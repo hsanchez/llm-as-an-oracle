@@ -200,11 +200,14 @@ class VerifierStrategy(BaseStrategy):
   ) -> ScoreResult:
     """Score a trajectory across all criteria with repeated verifications."""
     criterion_scores: dict[str, list[float]] = {c.id: [] for c in self.criteria}
+    all_reasoning: list[str] = []
 
     for criterion in self.criteria:
-      for _ in range(self.config.num_verifications):
+      for repetition in range(self.config.num_verifications):
         result = self.score_trajectory(task, trajectory, criterion)
         criterion_scores[criterion.id].append(result.score)
+        if repetition == 0 and result.reasoning.strip():
+          all_reasoning.append(f"[{criterion.name}]\n{result.reasoning.strip()}")
 
     average_criterion_scores = {
       criterion_id: sum(scores) / len(scores) for criterion_id, scores in criterion_scores.items()
@@ -217,6 +220,11 @@ class VerifierStrategy(BaseStrategy):
       score=overall_score,
       criterion_scores=average_criterion_scores,
       confidence=self._compute_confidence(average_criterion_scores),
+      reasoning="\n\n".join(all_reasoning),
+      metadata={
+        "num_criteria": len(self.criteria),
+        "num_verifications": self.config.num_verifications,
+      },
     )
 
   def _create_scoring_prompt(
