@@ -95,7 +95,9 @@ across multiple evaluated trajectories, not within a single token prediction.
 
 ## Consequences
 
-Judge and Verifier remain the only evaluation strategies in this revision.
+At the time of this ADR, Judge and Verifier remained the only evaluation
+strategies. ADR 002 later added adversarial claim verification as an optional
+router strategy.
 
 Human escalation surfaces at the natural point of uncertainty — after the
 oracle has tried to evaluate and failed to produce a discriminating result —
@@ -104,8 +106,10 @@ rather than as a speculative pre-flight classifier.
 The host application remains free to implement `HumanOracle` as a console
 prompt, async webhook, ticket system, or simulated benchmark human.
 
-`HumanResponsePending` is recognized but not returned through the router;
-deferred workflows are out of scope for this revision.
+At the time of this ADR, `HumanResponsePending` was recognized but not returned
+through the router. ADR 002 later changed the router to return
+`HumanResponsePending` so host applications can persist and resume deferred
+review workflows.
 
 This is a minimal scaffold. It does not implement Ask-F1, multi-blocker
 scoring, or the full HiL-Bench evaluation protocol. Those require a blocker
