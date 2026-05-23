@@ -60,7 +60,7 @@
 # - Run `uv sync` to install dependencies.
 #
 # ```bash
-# uv run python examples/06_full_demo.py
+# uv run python examples/07_full_demo.py
 # ```
 #
 # Cost note: `num_verifications=1` and `max_workers=1` minimize API calls.

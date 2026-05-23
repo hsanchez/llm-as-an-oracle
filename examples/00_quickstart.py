@@ -1,15 +1,27 @@
 #!/usr/bin/env python3
-"""End-to-end example: LLM Oracle — Verifier, Judge, Harness, Router.
 
-Runs completely offline using StubProvider (no API keys needed).
-Swap StubProvider for OpenAIProvider, AnthropicProvider, or GeminiProvider
-and set the corresponding API key environment variable when you are ready
-to use a real model.
+# %% [markdown]
+# # Quickstart
+#
+# Smallest offline end-to-end path through the core library:
+#
+# - `VerifierStrategy`
+# - `JudgeStrategy`
+# - `EvaluationHarness`
+# - `OracleRouter`
+# - routing signals and custom policy extension
+#
+# Swap `StubProvider` for `OpenAIProvider`, `AnthropicProvider`, or
+# `GeminiProvider` when you are ready to use a real model.
+#
+# ```bash
+# uv run python examples/00_quickstart.py
+# ```
 
-    cd llm-as-oracle
-    uv run python examples/00_end_to_end.py
-"""
+# %% [markdown]
+# ## 1. Imports
 
+# %%
 from __future__ import annotations
 
 from llm_oracle import (
@@ -29,10 +41,13 @@ from llm_oracle import (
 from llm_oracle.core.models import StrategyType
 from llm_oracle.routing.router import PolicyVote, RoutingPolicy, RoutingSignals, SignalExtractor
 
-# ---------------------------------------------------------------------------
-# 1. Setup — shared model, config, and criteria
-# ---------------------------------------------------------------------------
+# %% [markdown]
+# ## 2. Setup
+#
+# Define the model provider, scoring config, and evaluation criteria shared by
+# the Judge and Verifier.
 
+# %%
 # StubProvider mimics real model responses without any network call.
 # Replace with OpenAIProvider("gpt-4o") or AnthropicProvider("claude-opus-4-5")
 # once you have an API key.
@@ -78,11 +93,10 @@ criteria = [
   ),
 ]
 
+# %% [markdown]
+# ## 3. LLM-as-a-Verifier
 
-# ---------------------------------------------------------------------------
-# 2. LLM-as-a-Verifier
-# ---------------------------------------------------------------------------
-
+# %%
 verifier = VerifierStrategy(model, config, criteria)
 
 task = Task(
@@ -157,11 +171,10 @@ for trajectory_id, score_result in sorted(
 ):
   print(f"  {trajectory_id:<16s}  score={score_result.score:.4f}")
 
+# %% [markdown]
+# ## 4. LLM-as-a-Judge
 
-# ---------------------------------------------------------------------------
-# 3. LLM-as-a-Judge
-# ---------------------------------------------------------------------------
-
+# %%
 judge = JudgeStrategy(
   model,
   config,
@@ -192,11 +205,13 @@ for trajectory_id, score_result in sorted(
 ):
   print(f"  {trajectory_id:<16s}  score={score_result.score:.4f}")
 
+# %% [markdown]
+# ## 5. Evaluation Harness
+#
+# Run the Verifier and Judge side by side and compute task-level hardness
+# signals.
 
-# ---------------------------------------------------------------------------
-# 4. Evaluation Harness — run verifier and judge side-by-side
-# ---------------------------------------------------------------------------
-
+# %%
 search_task = Task(
   id="binary-search",
   description="Binary search in a sorted array",
@@ -295,11 +310,12 @@ print(f"  Easy tasks ({len(report.easy_tasks)})")
 print(f"    verifier accuracy : {report.verifier_accuracy_on_easy():.1%}")
 print(f"    judge    accuracy : {report.judge_accuracy_on_easy():.1%}")
 
+# %% [markdown]
+# ## 6. Oracle Router
+#
+# Route each task to the configured strategy that best matches the task signals.
 
-# ---------------------------------------------------------------------------
-# 5. OracleRouter — automatic strategy selection
-# ---------------------------------------------------------------------------
-
+# %%
 router = OracleRouter.default(verifier, judge, confidence_threshold=0.50)
 
 print("\n# Router — route each task (no prior hardness)")
@@ -355,11 +371,10 @@ print(f"  strategy   : {decision.selected_strategy.value}")
 print(f"  confidence : {decision.confidence:.3f}")
 print(f"  best traj  : {result.best_trajectory_id}")
 
+# %% [markdown]
+# ## 7. Signal Introspection
 
-# ---------------------------------------------------------------------------
-# 6. Signal introspection — inspect what the router sees for any task
-# ---------------------------------------------------------------------------
-
+# %%
 print("\n# SignalExtractor — routing signals for each task")
 extractor = SignalExtractor()
 for example_task, candidate_trajectories in tasks_and_trajectories:

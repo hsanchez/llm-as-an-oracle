@@ -14,7 +14,7 @@
 # It runs completely offline using `StubProvider`.
 #
 # ```bash
-# uv run python examples/07_adversarial_claim_verification.py
+# uv run python examples/06_adversarial_claim_verification.py
 # ```
 
 # %% [markdown]
