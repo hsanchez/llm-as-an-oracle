@@ -1,15 +1,16 @@
 """Routing package for LLM Oracle.
 
 Exports the intelligent task router and all supporting components:
-  - OracleRouter: Main router that dispatches to verifier or judge
+  - OracleRouter: Main router that dispatches to configured strategies
   - PolicyChain: Aggregates multiple routing policy votes
   - RoutingPolicy: Abstract base for custom routing policies
-  - Built-in policies: GroundTruthPolicy, KeywordDomainPolicy, etc.
+  - Built-in policies: GroundTruthPolicy, ClaimVerificationPolicy, etc.
   - SignalExtractor: Extracts routing signals from tasks
   - DetailedRoutingDecision: Auditable routing decision with per-policy votes
 """
 
 from llm_oracle.routing.router import (
+  ClaimVerificationPolicy,
   DetailedRoutingDecision,
   DifficultyPolicy,
   GroundTruthPolicy,
@@ -34,6 +35,7 @@ __all__ = [
   "RoutingPolicy",
   # Built-in policies
   "GroundTruthPolicy",
+  "ClaimVerificationPolicy",
   "KeywordDomainPolicy",
   "DifficultyPolicy",
   "TrajectoryCountPolicy",

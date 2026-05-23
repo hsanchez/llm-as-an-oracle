@@ -83,6 +83,7 @@ from llm_oracle import (
   AnthropicProvider,
   EvaluationCriterion,
   EvaluationHarness,
+  EvaluationResult,
   HumanRequest,
   HumanResponse,
   JudgeStrategy,
@@ -577,6 +578,8 @@ print(f"  Confidence        : {decision.confidence:.3f}")
 print(f"  Reasoning         : {decision.reasoning}")
 
 oracle_result, oracle_decision = router.evaluate(n1_task, n1_trajectories)
+if not isinstance(oracle_result, EvaluationResult):
+  raise RuntimeError("Evaluation is waiting on a human response.")
 print(f"\n  Oracle best trajectory : {oracle_result.best_trajectory_id}")
 
 # %% [markdown]
@@ -640,6 +643,8 @@ print("ROUTER + HUMAN ORACLE — Task 2 (event log storage)")
 print("=" * 60)
 
 el_result, el_decision = router_with_escalation.evaluate(event_log_task, event_log_trajectories)
+if not isinstance(el_result, EvaluationResult):
+  raise RuntimeError("Evaluation is waiting on a human response.")
 
 print(f"\n  Strategy   : {el_decision.selected_strategy.value}")
 print(f"  Confidence : {el_decision.confidence:.3f}")

@@ -15,6 +15,7 @@ from __future__ import annotations
 from llm_oracle import (
   EvaluationCriterion,
   EvaluationHarness,
+  EvaluationResult,
   JudgeStrategy,
   OracleRouter,
   ScoringConfig,
@@ -348,6 +349,8 @@ router.register_policy(ShortProblemPolicy())
 
 print("\n# Router — route-and-evaluate in one call")
 result, decision = router.evaluate(task, trajectories)
+if not isinstance(result, EvaluationResult):
+  raise RuntimeError("Evaluation is waiting on a human response.")
 print(f"  strategy   : {decision.selected_strategy.value}")
 print(f"  confidence : {decision.confidence:.3f}")
 print(f"  best traj  : {result.best_trajectory_id}")

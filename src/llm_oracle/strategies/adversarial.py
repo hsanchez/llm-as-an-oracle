@@ -78,7 +78,7 @@ class AdversarialVerifierStrategy(BaseStrategy):
     self.min_confidence = min_confidence
 
   def get_strategy_type(self) -> StrategyType:
-    return StrategyType.VERIFIER
+    return StrategyType.ADVERSARIAL
 
   def evaluate(
     self,

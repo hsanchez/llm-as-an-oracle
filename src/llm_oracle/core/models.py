@@ -22,6 +22,7 @@ class StrategyType(enum.Enum):
 
   VERIFIER = "verifier"
   JUDGE = "judge"
+  ADVERSARIAL = "adversarial"
 
 
 @dataclass(frozen=True)

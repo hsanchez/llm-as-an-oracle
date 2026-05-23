@@ -59,6 +59,7 @@ from llm_oracle.evaluation.harness import (
   _validate_hardness_weights,
 )
 from llm_oracle.routing.router import (
+  ClaimVerificationPolicy,
   DetailedRoutingDecision,
   DifficultyPolicy,
   GroundTruthPolicy,
@@ -162,6 +163,17 @@ def essay_task() -> Task:
       "time complexity, space complexity, and practical trade-offs."
     ),
     difficulty=TaskDifficulty.MEDIUM,
+  )
+
+
+@pytest.fixture()
+def claim_verification_task() -> Task:
+  return Task(
+    id="task-claim",
+    description="Verify compliance assessment",
+    problem_statement="Confirm whether the original complied? assessment is correct.",
+    difficulty=TaskDifficulty.MEDIUM,
+    metadata={"evaluation_mode": "claim_verification"},
   )
 
 
@@ -666,7 +678,7 @@ class TestAdversarialVerifierStrategy:
   ) -> None:
     strategy = adversarial_verifier("A", "T", scoring_config, criteria)
 
-    assert strategy.get_strategy_type() == StrategyType.VERIFIER
+    assert strategy.get_strategy_type() == StrategyType.ADVERSARIAL
 
   def test_rejects_non_verifier_confirmation_strategy(
     self,
@@ -1470,6 +1482,24 @@ class TestSignalExtractor:
     signals = extractor.extract(easy_task, trajectories)
     assert 0.0 <= signals.problem_length <= 1.0
 
+  def test_claim_verification_signal(
+    self,
+    extractor: SignalExtractor,
+    claim_verification_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    signals = extractor.extract(claim_verification_task, [trajectories[0]])
+    assert signals.is_claim_verification == pytest.approx(1.0)
+
+  def test_claim_verification_signal_defaults_to_zero(
+    self,
+    extractor: SignalExtractor,
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    signals = extractor.extract(easy_task, [trajectories[0]])
+    assert signals.is_claim_verification == pytest.approx(0.0)
+
 
 class TestRoutingPolicies:
   """Test each built-in routing policy in isolation."""
@@ -1646,6 +1676,26 @@ class TestRoutingPolicies:
     vote = policy.vote(easy_task, trajectories, signals)
     assert vote.preferred == StrategyType.JUDGE
 
+  def test_claim_verification_policy_prefers_adversarial(
+    self, claim_verification_task: Task, trajectories: list[Trajectory]
+  ) -> None:
+    signals = RoutingSignals(is_claim_verification=1.0)
+    policy = ClaimVerificationPolicy()
+    vote = policy.vote(claim_verification_task, [trajectories[0]], signals)
+
+    assert vote.preferred == StrategyType.ADVERSARIAL
+    assert vote.confidence > 0.9
+
+  def test_claim_verification_policy_abstains_for_normal_task(
+    self, easy_task: Task, trajectories: list[Trajectory]
+  ) -> None:
+    signals = RoutingSignals(is_claim_verification=0.0)
+    policy = ClaimVerificationPolicy()
+    vote = policy.vote(easy_task, [trajectories[0]], signals)
+
+    assert vote.preferred == StrategyType.JUDGE
+    assert vote.confidence == pytest.approx(0.0)
+
   def test_policy_vote_fields(self) -> None:
     vote = PolicyVote(
       policy_name="test",
@@ -1717,6 +1767,25 @@ class TestPolicyChain:
     assert strategy == StrategyType.JUDGE
     assert confidence > 0.5
 
+  def test_adversarial_decision(
+    self, claim_verification_task: Task, trajectories: list[Trajectory]
+  ) -> None:
+    signals = RoutingSignals(is_claim_verification=1.0, trajectory_count=1)
+    chain = PolicyChain(
+      [ClaimVerificationPolicy(), TrajectoryCountPolicy()],
+      confidence_threshold=0.5,
+    )
+
+    strategy, confidence, votes, reasoning = chain.decide(
+      claim_verification_task,
+      [trajectories[0]],
+      signals,
+    )
+
+    assert strategy == StrategyType.ADVERSARIAL
+    assert confidence > 0.5
+    assert "adversarial" in reasoning.lower()
+
   def test_fallback_when_below_threshold(
     self, easy_task: Task, trajectories: list[Trajectory]
   ) -> None:
@@ -1768,6 +1837,19 @@ class TestOracleRouter:
     router = OracleRouter.default(verifier, judge)
     assert isinstance(router, OracleRouter)
     assert len(router._chain.policies) >= 5
+    assert all(policy.name != "claim_verification" for policy in router._chain.policies)
+
+  def test_default_factory_installs_claim_policy_when_adversarial_configured(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+  ) -> None:
+    adversarial = adversarial_verifier("A", "T", scoring_config, criteria)
+    router = OracleRouter.default(verifier, judge, adversarial=adversarial)
+
+    assert any(policy.name == "claim_verification" for policy in router._chain.policies)
 
   def test_verifier_only_factory(self, verifier: VerifierStrategy, judge: JudgeStrategy) -> None:
     router = OracleRouter.verifier_only(verifier, judge)
@@ -1798,6 +1880,36 @@ class TestOracleRouter:
     assert decision.task_id == easy_task.id
     assert decision.selected_strategy in {StrategyType.VERIFIER, StrategyType.JUDGE}
     assert 0.0 <= decision.confidence <= 1.0
+
+  def test_route_claim_verification_to_adversarial_when_configured(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    claim_verification_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    adversarial = adversarial_verifier("A", "T", scoring_config, criteria)
+    router = OracleRouter.default(verifier, judge, adversarial=adversarial)
+
+    decision = router.route(claim_verification_task, [trajectories[0]])
+
+    assert decision.selected_strategy == StrategyType.ADVERSARIAL
+
+  def test_route_normal_single_trajectory_without_adversarial_policy(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    router = OracleRouter.default(verifier, judge)
+
+    decision = router.route(easy_task, [trajectories[0]])
+
+    assert decision.selected_strategy in {StrategyType.VERIFIER, StrategyType.JUDGE}
+    assert decision.selected_strategy != StrategyType.ADVERSARIAL
 
   def test_route_populates_signals(
     self,
@@ -1861,11 +1973,41 @@ class TestOracleRouter:
   ) -> None:
     verifier_router = OracleRouter.verifier_only(verifier, judge)
     result, decision = verifier_router.evaluate(easy_task, trajectories)
+    assert isinstance(result, EvaluationResult)
     assert result.strategy_type == StrategyType.VERIFIER
 
     judge_router = OracleRouter.judge_only(verifier, judge)
     result, decision = judge_router.evaluate(easy_task, trajectories)
+    assert isinstance(result, EvaluationResult)
     assert result.strategy_type == StrategyType.JUDGE
+
+  def test_evaluate_dispatches_to_adversarial_strategy(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    claim_verification_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    adversarial = adversarial_verifier("A", "T", scoring_config, criteria)
+    router = OracleRouter.default(verifier, judge, adversarial=adversarial)
+
+    result, decision = router.evaluate(claim_verification_task, [trajectories[0]])
+
+    assert decision.selected_strategy == StrategyType.ADVERSARIAL
+    assert isinstance(result, EvaluationResult)
+    assert result.strategy_type == StrategyType.ADVERSARIAL
+
+  def test_resolve_adversarial_without_config_raises(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+  ) -> None:
+    router = OracleRouter.default(verifier, judge)
+
+    with pytest.raises(ValueError, match="no adversarial strategy"):
+      router._resolve_strategy(StrategyType.ADVERSARIAL)
 
   def test_decision_log_accumulates(
     self,
@@ -2217,6 +2359,7 @@ class TestHumanEscalation:
     result, decision = router.evaluate(task_no_clarifications, two_trajectories)
     assert decision.metadata.get("human_escalated") is True
     assert decision.metadata.get("human_response") == "use strict rules"
+    assert isinstance(result, EvaluationResult)
     assert result.task_id == task_no_clarifications.id
 
   def test_unknown_answer_key_raises_value_error(
@@ -2235,7 +2378,7 @@ class TestHumanEscalation:
     with pytest.raises(ValueError, match="unknown-key"):
       router.evaluate(task_with_clarifications, two_trajectories)
 
-  def test_pending_response_raises_runtime_error(
+  def test_pending_response_returns_pending_handle(
     self,
     verifier: VerifierStrategy,
     judge: JudgeStrategy,
@@ -2252,8 +2395,14 @@ class TestHumanEscalation:
       human_oracle=_PendingOracle(),
       uncertainty_threshold=1.1,
     )
-    with pytest.raises(RuntimeError, match="HumanResponsePending"):
-      router.evaluate(task_with_clarifications, two_trajectories)
+    result, decision = router.evaluate(task_with_clarifications, two_trajectories)
+
+    assert isinstance(result, HumanResponsePending)
+    assert result.external_id == "slack-42"
+    assert decision.metadata["human_escalated"] is True
+    assert decision.metadata["human_pending"] is True
+    assert decision.metadata["human_request_id"] == "uncertainty-ambiguous-task"
+    assert decision.metadata["human_pending_external_id"] == "slack-42"
 
   def test_escalation_metadata_in_decision(
     self,
@@ -2299,6 +2448,7 @@ class TestIntegration:
     trajectories: list[Trajectory],
   ) -> None:
     result, decision = router.evaluate(easy_task, trajectories)
+    assert isinstance(result, EvaluationResult)
     assert result.task_id == easy_task.id
     assert result.best_trajectory_id in {t.id for t in trajectories}
     assert decision.selected_strategy in {StrategyType.VERIFIER, StrategyType.JUDGE}

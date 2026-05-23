@@ -3,13 +3,14 @@
 ## Overview
 
 LLM-as-an-Oracle is an evaluation orchestrator. It sits above
-`LLM-as-a-Judge` and `LLM-as-a-Verifier` and decides which evaluator is the
-better fit for a given task.
+`LLM-as-a-Judge`, `LLM-as-a-Verifier`, and optional reliability strategies such
+as adversarial claim verification. It decides which evaluator is the better fit
+for a given task.
 
 The Oracle is not a third evaluator. Its job is routing:
 
 1. inspect the task and candidate trajectories
-2. choose `Judge` or `Verifier`
+2. choose a configured evaluation strategy
 3. return the selected evaluator's result together with the routing decision
 
 This architecture exists because the two evaluation styles are complementary:
@@ -17,6 +18,8 @@ This architecture exists because the two evaluation styles are complementary:
 - `Judge` is stronger for holistic, open-ended, or subjective evaluation
 - `Verifier` is stronger when evaluation can use concrete evidence such as test
   cases, reference answers, expected outputs, or execution results
+- `AdversarialVerifier` is stronger when a trajectory is a claim that needs
+  evidence-based confirmation or rejection
 
 ## System Shape
 
@@ -66,9 +69,9 @@ to select the evaluation strategy.
 The default routing flow is:
 
 1. `SignalExtractor` derives `RoutingSignals`
-2. `PolicyChain` runs six routing policies
-3. weighted vote totals are aggregated for `VERIFIER` and `JUDGE`
-4. the higher-confidence side wins
+2. `PolicyChain` runs the configured routing policies
+3. weighted vote totals are aggregated per configured strategy
+4. the higher-confidence strategy wins
 5. if confidence is below `0.60`, the router falls back to `Judge`
 
 `OracleRouter.route(...)` returns a `DetailedRoutingDecision` with:
@@ -82,7 +85,8 @@ The default routing flow is:
 
 `OracleRouter.evaluate(...)` then runs only the selected strategy and returns:
 
-- `EvaluationResult`
+- `EvaluationResult`, or `HumanResponsePending` when human escalation is
+  deferred
 - `DetailedRoutingDecision`
 
 ### Routing Signals
@@ -97,6 +101,7 @@ The default router derives these signals from `Task` and `Trajectory` data:
 - `judgment_keyword_density`
 - `problem_length`
 - `output_available`
+- `is_claim_verification`
 - `prior_hardness`
 
 These are simple, inspectable features. The router is designed to make its
@@ -104,7 +109,7 @@ assumptions explicit.
 
 ### Routing Policies
 
-The default `PolicyChain` uses six deterministic policies:
+The default `PolicyChain` uses six deterministic base policies:
 
 1. `PriorHardnessPolicy`
 2. `GroundTruthPolicy`
@@ -112,6 +117,11 @@ The default `PolicyChain` uses six deterministic policies:
 4. `DifficultyPolicy`
 5. `OutputAvailabilityPolicy`
 6. `TrajectoryCountPolicy`
+
+When an adversarial strategy is configured, `OracleRouter.default(...)` also
+installs `ClaimVerificationPolicy`. It strongly prefers
+`StrategyType.ADVERSARIAL` only when
+`task.metadata["evaluation_mode"] == "claim_verification"`.
 
 Each policy emits a `PolicyVote`:
 
@@ -121,8 +131,8 @@ Each policy emits a `PolicyVote`:
 - signals used
 - reasoning
 
-The chain aggregates `confidence * weight` per side and normalizes the winning
-side into the final routing confidence.
+The chain aggregates `confidence * weight` per strategy and normalizes the
+winning strategy into the final routing confidence.
 
 ### Judge Strategy
 

@@ -33,6 +33,7 @@ from dataclasses import dataclass
 
 from llm_oracle import (
   EvaluationCriterion,
+  EvaluationResult,
   HumanRequest,
   HumanResponse,
   JudgeStrategy,
@@ -237,6 +238,8 @@ print(f"  Escalated  : {decision.metadata.get('human_escalated', False)}")
 print(f"  Answer     : {decision.metadata.get('human_response', '—')}")
 
 print("\n# Evaluation result")
+if not isinstance(result, EvaluationResult):
+  raise RuntimeError("Evaluation is waiting on a human response.")
 print(f"  Best trajectory : {result.best_trajectory_id}")
 for tid, score in result.trajectory_scores.items():
   print(f"  {tid:<30s}  score={score.score:.3f}")

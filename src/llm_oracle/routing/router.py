@@ -105,6 +105,7 @@ class RoutingSignals:
   judgment_keyword_density: float = 0.0
   problem_length: float = 0.0
   output_available: float = 0.0
+  is_claim_verification: float = 0.0
   prior_hardness: float | None = None
 
 
@@ -435,6 +436,41 @@ class PriorHardnessPolicy(RoutingPolicy):
     )
 
 
+class ClaimVerificationPolicy(RoutingPolicy):
+  """Prefer the adversarial verifier for explicitly marked claim-verification tasks."""
+
+  name = "claim_verification"
+  weight = 10.0
+
+  def vote(
+    self,
+    task: Task,
+    trajectories: TrajectoryList,
+    signals: RoutingSignals,
+  ) -> PolicyVote:
+    if signals.is_claim_verification >= 1.0:
+      return PolicyVote(
+        policy_name=self.name,
+        preferred=StrategyType.ADVERSARIAL,
+        confidence=0.95,
+        weight=self.weight,
+        signals_used=["is_claim_verification"],
+        reasoning=(
+          "Task metadata marks this as claim verification; adversarial "
+          "confirmation/challenge evaluation is preferred."
+        ),
+      )
+
+    return PolicyVote(
+      policy_name=self.name,
+      preferred=StrategyType.JUDGE,
+      confidence=0.0,
+      weight=self.weight,
+      signals_used=["is_claim_verification"],
+      reasoning="Task is not marked for claim verification; policy abstains.",
+    )
+
+
 class OutputAvailabilityPolicy(RoutingPolicy):
   """Prefer the verifier when execution outputs are available.
 
@@ -507,18 +543,14 @@ class PolicyChain:
       policy.vote(task, trajectories, signals) for policy in self._policies
     ]
 
-    verifier_score, judge_score = self._aggregate(votes)
-    total = verifier_score + judge_score
+    scores = self._aggregate(votes)
+    total = sum(scores.values())
 
     if total < 1e-9:
       return self._fallback, 0.5, votes, "All policies abstained; using fallback."
 
-    if verifier_score >= judge_score:
-      winner = StrategyType.VERIFIER
-      confidence = verifier_score / total
-    else:
-      winner = StrategyType.JUDGE
-      confidence = judge_score / total
+    winner = max(scores, key=lambda strategy_type: scores[strategy_type])
+    confidence = scores[winner] / total
 
     if confidence < self._threshold:
       reasoning = (
@@ -546,17 +578,13 @@ class PolicyChain:
     return self._fallback
 
   @staticmethod
-  def _aggregate(votes: list[PolicyVote]) -> tuple[float, float]:
-    """Return ``(verifier_total, judge_total)`` weighted confidence scores."""
-    verifier_total = 0.0
-    judge_total = 0.0
+  def _aggregate(votes: list[PolicyVote]) -> dict[StrategyType, float]:
+    """Return weighted confidence scores keyed by strategy type."""
+    totals = {strategy_type: 0.0 for strategy_type in StrategyType}
     for vote in votes:
       weighted = vote.confidence * vote.weight
-      if vote.preferred == StrategyType.VERIFIER:
-        verifier_total += weighted
-      else:
-        judge_total += weighted
-    return verifier_total, judge_total
+      totals[vote.preferred] += weighted
+    return totals
 
   @staticmethod
   def _build_reasoning(
@@ -623,6 +651,7 @@ class SignalExtractor:
       problem_length=min(len(task.problem_statement), 2000) / 2000.0,
       output_available=has_output,
       prior_hardness=prior_hardness,
+      is_claim_verification=float(task.metadata.get("evaluation_mode") == "claim_verification"),
     )
 
 
@@ -636,13 +665,14 @@ class DetailedRoutingDecision(RoutingDecision):
 
 
 class OracleRouter:
-  """Routes evaluation tasks to the verifier or judge strategy via a PolicyChain."""
+  """Routes evaluation tasks to configured strategies via a PolicyChain."""
 
   def __init__(
     self,
     verifier: BaseStrategy,
     judge: BaseStrategy,
     policy_chain: PolicyChain,
+    adversarial: BaseStrategy | None = None,
     signal_extractor: SignalExtractor | None = None,
     hardness_cache: dict[str, float] | None = None,
     human_oracle: HumanOracle | None = None,
@@ -650,6 +680,7 @@ class OracleRouter:
   ) -> None:
     self._verifier = verifier
     self._judge = judge
+    self._adversarial = adversarial
     self._chain = policy_chain
     self._extractor = signal_extractor or SignalExtractor()
     self._hardness_cache: dict[str, float] = hardness_cache or {}
@@ -665,23 +696,30 @@ class OracleRouter:
     *,
     hardness_cache: dict[str, float] | None = None,
     confidence_threshold: float = _CONFIDENCE_THRESHOLD,
+    adversarial: BaseStrategy | None = None,
     human_oracle: HumanOracle | None = None,
     uncertainty_threshold: float = _UNCERTAINTY_THRESHOLD,
   ) -> OracleRouter:
-    """Create a router with the default six-policy chain.
+    """Create a router with the default policy chain.
 
-    Policy weights: prior_hardness(1.8), ground_truth(2.0),
-    keyword_domain(1.5), difficulty(1.0), output_availability(0.9),
-    trajectory_count(0.8).
+    Policy weights: claim_verification(10.0, when adversarial is configured),
+    prior_hardness(1.8), ground_truth(2.0), keyword_domain(1.5),
+    difficulty(1.0), output_availability(0.9), trajectory_count(0.8).
     """
-    policies: list[RoutingPolicy] = [
-      PriorHardnessPolicy(),
-      GroundTruthPolicy(),
-      KeywordDomainPolicy(),
-      DifficultyPolicy(),
-      OutputAvailabilityPolicy(),
-      TrajectoryCountPolicy(),
-    ]
+    policies: list[RoutingPolicy] = []
+    if adversarial is not None:
+      policies.append(ClaimVerificationPolicy())
+
+    policies.extend(
+      [
+        PriorHardnessPolicy(),
+        GroundTruthPolicy(),
+        KeywordDomainPolicy(),
+        DifficultyPolicy(),
+        OutputAvailabilityPolicy(),
+        TrajectoryCountPolicy(),
+      ]
+    )
     chain = PolicyChain(
       policies,
       confidence_threshold=confidence_threshold,
@@ -691,6 +729,7 @@ class OracleRouter:
       verifier,
       judge,
       chain,
+      adversarial=adversarial,
       hardness_cache=hardness_cache,
       human_oracle=human_oracle,
       uncertainty_threshold=uncertainty_threshold,
@@ -767,17 +806,18 @@ class OracleRouter:
     self,
     task: Task,
     trajectories: TrajectoryList,
-  ) -> tuple[EvaluationResult, DetailedRoutingDecision]:
-    """Route and evaluate a task; returns ``(EvaluationResult, DetailedRoutingDecision)``.
+  ) -> tuple[EvaluationResult | HumanResponsePending, DetailedRoutingDecision]:
+    """Route and evaluate a task with its routing decision.
 
     If a ``human_oracle`` is configured and the score spread across trajectories
     falls below ``uncertainty_threshold``, the oracle asks the human for
-    clarification and re-evaluates with the clarified task.
+    clarification and re-evaluates with the clarified task. If the human
+    response is deferred, returns ``HumanResponsePending`` with the decision
+    metadata needed by the host application to resume later.
 
     Raises:
       ValueError: If ``trajectories`` is empty.
       ValueError: If a human answer does not match any clarification key.
-      RuntimeError: If the human oracle returns a pending (deferred) response.
     """
     if not trajectories:
       raise ValueError(f"Trajectory list for task '{task.id}' must be non-empty.")
@@ -791,10 +831,17 @@ class OracleRouter:
       response = self._human_oracle.ask(human_request)
 
       if isinstance(response, HumanResponsePending):
-        raise RuntimeError(
-          f"Deferred human responses are not yet supported. "
-          f"Request {response.request_id!r} returned HumanResponsePending."
+        decision.metadata.update(
+          {
+            "human_escalated": True,
+            "human_pending": True,
+            "human_request_id": human_request.id,
+            "human_pending_request_id": response.request_id,
+            "human_pending_external_id": response.external_id,
+            "human_pending_message": response.message,
+          }
         )
+        return response, decision
 
       clarified_task = self._apply_clarification(task, response)
       decision = self.route(clarified_task, trajectories)
@@ -912,10 +959,10 @@ class OracleRouter:
     if not self._decision_log:
       return "No routing decisions recorded yet."
 
-    verifier_count = sum(
-      1 for d in self._decision_log if d.selected_strategy == StrategyType.VERIFIER
-    )
-    judge_count = len(self._decision_log) - verifier_count
+    strategy_counts = {
+      strategy_type: sum(1 for d in self._decision_log if d.selected_strategy == strategy_type)
+      for strategy_type in StrategyType
+    }
     average_confidence = sum(d.confidence for d in self._decision_log) / len(self._decision_log)
     average_ms = sum(d.elapsed_ms for d in self._decision_log) / len(self._decision_log)
 
@@ -925,8 +972,9 @@ class OracleRouter:
       "  OracleRouter — Routing Audit",
       "═" * 56,
       f"  Total decisions  : {len(self._decision_log)}",
-      f"  → Verifier       : {verifier_count}",
-      f"  → Judge          : {judge_count}",
+      f"  → Verifier       : {strategy_counts[StrategyType.VERIFIER]}",
+      f"  → Judge          : {strategy_counts[StrategyType.JUDGE]}",
+      f"  → Adversarial    : {strategy_counts[StrategyType.ADVERSARIAL]}",
       f"  Avg confidence   : {average_confidence:.3f}",
       f"  Avg latency      : {average_ms:.2f} ms",
       "",
@@ -944,4 +992,10 @@ class OracleRouter:
     """Map a StrategyType to the corresponding strategy instance."""
     if strategy_type == StrategyType.VERIFIER:
       return self._verifier
-    return self._judge
+    if strategy_type == StrategyType.JUDGE:
+      return self._judge
+    if self._adversarial is None:
+      raise ValueError(
+        "StrategyType.ADVERSARIAL selected, but no adversarial strategy is configured."
+      )
+    return self._adversarial

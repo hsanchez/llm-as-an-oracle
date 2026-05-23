@@ -52,6 +52,7 @@ from llm_oracle.evaluation.harness import (
 
 # ── Routing ───────────────────────────────────────────────────────────────────
 from llm_oracle.routing.router import (
+  ClaimVerificationPolicy,
   DetailedRoutingDecision,
   DifficultyPolicy,
   GroundTruthPolicy,
@@ -130,6 +131,7 @@ __all__ = [
   "SignalExtractor",
   # Built-in policies
   "GroundTruthPolicy",
+  "ClaimVerificationPolicy",
   "KeywordDomainPolicy",
   "DifficultyPolicy",
   "TrajectoryCountPolicy",

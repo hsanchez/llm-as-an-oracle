@@ -39,6 +39,7 @@ from llm_oracle import (
   AnthropicProvider,
   EvaluationCriterion,
   EvaluationHarness,
+  EvaluationResult,
   JudgeStrategy,
   OracleRouter,
   ScoringConfig,
@@ -293,7 +294,9 @@ for trajectory_id, score_result in sorted(
   verifier_result.trajectory_scores.items(),
   key=lambda item: -item[1].score,
 ):
-  print(f"  {trajectory_id}: score={score_result.score:.4f}  confidence={score_result.confidence:.4f}")
+  print(
+    f"  {trajectory_id}: score={score_result.score:.4f}  confidence={score_result.confidence:.4f}"
+  )
 
 
 # %% [markdown]
@@ -343,7 +346,9 @@ for trajectory_id, score_result in sorted(
   judge_result.trajectory_scores.items(),
   key=lambda item: -item[1].score,
 ):
-  print(f"  {trajectory_id}: score={score_result.score:.4f}  confidence={score_result.confidence:.4f}")
+  print(
+    f"  {trajectory_id}: score={score_result.score:.4f}  confidence={score_result.confidence:.4f}"
+  )
 
 
 # %% [markdown]
@@ -381,6 +386,8 @@ print(decision.reasoning)
 
 # %%
 oracle_result, oracle_decision = router.evaluate(task, trajectories)
+if not isinstance(oracle_result, EvaluationResult):
+  raise RuntimeError("Evaluation is waiting on a human response.")
 
 print("Oracle evaluation:")
 print("  strategy selected:", oracle_decision.selected_strategy.value)
@@ -490,6 +497,8 @@ ops_trajectories = [
 
 ops_decision = router.route(ops_task, ops_trajectories)
 ops_result, _ = router.evaluate(ops_task, ops_trajectories)
+if not isinstance(ops_result, EvaluationResult):
+  raise RuntimeError("Evaluation is waiting on a human response.")
 
 print("Ops task routing:")
 print("  selected strategy:", ops_decision.selected_strategy.value)
