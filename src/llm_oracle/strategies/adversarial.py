@@ -262,6 +262,7 @@ class AdversarialVerifierStrategy(BaseStrategy):
     challenge_result: ScoreResult,
     decision: AdversarialDecision,
   ) -> str:
+    # Keep model justification and deterministic policy explanation separate for auditability.
     if decision == AdversarialDecision.CONFIRMED:
       return "Confirmation is high, challenge is low, and both passes are confident."
     if decision == AdversarialDecision.REJECTED:
