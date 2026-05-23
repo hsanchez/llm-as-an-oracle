@@ -994,8 +994,11 @@ class OracleRouter:
       return self._verifier
     if strategy_type == StrategyType.JUDGE:
       return self._judge
-    if self._adversarial is None:
-      raise ValueError(
-        "StrategyType.ADVERSARIAL selected, but no adversarial strategy is configured."
-      )
-    return self._adversarial
+    if strategy_type == StrategyType.ADVERSARIAL:
+      if self._adversarial is None:
+        raise ValueError(
+          "StrategyType.ADVERSARIAL selected, but no adversarial strategy is configured."
+        )
+      return self._adversarial
+
+    raise ValueError(f"Unsupported strategy type: {strategy_type!r}")
