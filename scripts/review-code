@@ -1,0 +1,57 @@
+#!/usr/bin/env nu
+
+# A command to review uncommitted changes in the working tree.
+#
+# IMPORTANT: This command is prompted to NOT write any code and to ONLY
+# produce a review summary. You should still be vigilant when running this
+# but that is the expected behavior.
+#
+# Exits cleanly if there are no uncommitted changes.
+def main [] {
+  let diff = git diff HEAD | str trim
+
+  if ($diff | is-empty) {
+    print "No uncommitted changes to review."
+    return
+  }
+
+  $"
+# Code Review
+
+Inspect the uncommitted changes in the working tree below. Identify any
+possible issues and suggest improvements. Do not write code. Explain the
+problems clearly and propose a brief plan for addressing them.
+
+## Your Tasks
+
+You are an experienced software developer with expertise in code review.
+
+Review the diff below and analyze all relevant code for possible issues,
+including but not limited to:
+
+- Code quality and readability
+- Code style that matches or mimics the rest of the codebase
+- Potential bugs or logical errors
+- Edge cases that may not be handled
+- Performance considerations
+- Security vulnerabilities
+- Backwards compatibility \(if applicable\)
+- Test coverage and effectiveness
+
+For test coverage, consider if the changes are in an area of the codebase
+that is testable. If so, check if there are appropriate tests added or
+modified. Consider if the code itself should be modified to be more
+testable.
+
+Think deeply about the implications of the changes here and proposed.
+Consult the oracle if you have access to it.
+
+**ONLY CREATE A SUMMARY. DO NOT WRITE ANY CODE.**
+
+## Uncommitted Changes
+
+```diff
+($diff)
+```
+" | str trim
+}
