@@ -102,7 +102,7 @@ Override:
   - Do not ask for or reference issue numbers
   - Use `PLAN.md` for task tracking instead (create or maintain as needed)
   - Use `TodoWrite` to track multi-step tasks; check off items as completed — persists within the session only, not to disk
-
+  - If `TodoWrite` is unavailable, use the closest available session plan tool
 
 # Documentation
 
