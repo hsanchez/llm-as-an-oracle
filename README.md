@@ -35,6 +35,7 @@ Most users should start with this common import set:
 
 ```python
 from llm_oracle import (
+  AdversarialVerifierStrategy,
   EvaluationCriterion,
   EvaluationHarness,
   JudgeStrategy,
@@ -118,6 +119,77 @@ reasoning trace.
 
 For the full algorithm and policy details, see
 [`docs/oracle-algorithm.md`](docs/oracle-algorithm.md).
+
+## Adversarial Claim Verification
+
+`AdversarialVerifierStrategy` verifies a claim represented by a trajectory. It
+wraps two `VerifierStrategy` instances:
+
+- a confirmation verifier that asks whether the claim is supported
+- a challenge verifier that asks whether evidence supports rejecting the claim
+
+The two passes are controlled by separate criteria:
+
+```python
+confirmation_criterion = EvaluationCriterion(
+  id="claim_supported",
+  name="Claim supported",
+  description=(
+    "Score high only when the original claim is clearly supported by the "
+    "task evidence and rubric. Score low when the evidence does not support "
+    "the claim or the claim requires assumptions not present in the task."
+  ),
+)
+
+challenge_criterion = EvaluationCriterion(
+  id="claim_challenged",
+  name="Claim challenged",
+  description=(
+    "Score high only when there is an evidence-based reason the original "
+    "claim is wrong. Score low when the challenge would require speculation "
+    "or when the original claim is well supported."
+  ),
+)
+```
+
+The decision policy is:
+
+```text
+confirmation high, challenge low, both confident -> confirmed
+confirmation low, challenge high, both confident -> rejected
+otherwise -> uncertain
+```
+
+Use it directly when every trajectory is already a claim to verify:
+
+```python
+confirmation_verifier = VerifierStrategy(model, confirmation_config, [confirmation_criterion])
+challenge_verifier = VerifierStrategy(model, challenge_config, [challenge_criterion])
+
+adversarial = AdversarialVerifierStrategy(
+  confirmation_verifier=confirmation_verifier,
+  challenge_verifier=challenge_verifier,
+  confirmation_criterion=confirmation_criterion,
+  challenge_criterion=challenge_criterion,
+)
+
+result = adversarial.evaluate(task, [trajectory])
+decision = result.trajectory_scores[trajectory.id].metadata["decision"]
+```
+
+To use it through the Oracle, pass it in the verifier slot:
+
+```python
+router = OracleRouter.default(
+  verifier=adversarial,
+  judge=judge,
+)
+```
+
+The router still chooses between `VERIFIER` and `JUDGE`. It does not yet
+automatically choose between a normal verifier and an adversarial verifier. If
+the router selects the verifier branch, the configured adversarial verifier is
+what runs.
 
 ## Evaluation Metrics
 

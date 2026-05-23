@@ -39,7 +39,10 @@ Selected strategy
    |      Holistic, rubric-based evaluation
    |
    +--> VerifierStrategy
-          Structured, evidence-sensitive evaluation
+   |      Structured, evidence-sensitive evaluation
+   |
+   +--> AdversarialVerifierStrategy
+          Claim verification with confirmation and challenge passes
    |
    v
 EvaluationResult + DetailedRoutingDecision
@@ -150,6 +153,18 @@ Current characteristics:
 This strategy is useful when task correctness can be grounded in stronger
 evidence than holistic judgment alone.
 
+### Adversarial Verifier Strategy
+
+`AdversarialVerifierStrategy` verifies a claim represented by a trajectory. It
+wraps two verifier strategies:
+
+- confirmation verifier: checks whether the claim is supported
+- challenge verifier: checks whether evidence supports rejecting the claim
+
+It returns a normal `EvaluationResult` and stores the adversarial decision in
+`ScoreResult.metadata["decision"]` as `confirmed`, `rejected`, or `uncertain`.
+The `uncertain` decision is intended for host-managed human escalation.
+
 ### Evaluation Harness
 
 `EvaluationHarness` is the comparison and benchmarking layer. It is separate
@@ -186,6 +201,7 @@ src/llm_oracle/
 │   ├── providers.py
 │   └── strategy.py
 ├── strategies/
+│   ├── adversarial.py
 │   ├── judge.py
 │   └── verifier.py
 ├── routing/

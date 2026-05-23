@@ -185,5 +185,3 @@ class ScoringConfig:
 TrajectoryList = Sequence[Trajectory]
 ScoreDict = dict[str, float]
 CriterionList = Sequence[EvaluationCriterion]
-
-

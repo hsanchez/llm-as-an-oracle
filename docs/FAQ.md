@@ -69,6 +69,45 @@ when used with Anthropic models.
 
 ---
 
+## What is an Adversarial Verifier?
+
+The Adversarial Verifier (`AdversarialVerifierStrategy`) is a claim verifier
+built from two `VerifierStrategy` instances.
+
+It is useful when a single trajectory represents a claim that needs
+confirmation, such as "this model complied", "this answer satisfies the
+rubric", or "this output refused the unsafe request".
+
+It runs two passes:
+
+1. **Confirmation** — checks whether the claim is supported by the evidence and
+   criteria.
+2. **Challenge** — checks whether there is an evidence-based reason the claim
+   is wrong.
+
+The confirmation criterion should reward support for the original claim. For
+example: "Score high only when the original claim is clearly supported by the
+task evidence and rubric."
+
+The challenge criterion should reward evidence against the original claim. For
+example: "Score high only when there is an evidence-based reason the original
+claim is wrong; score low when the challenge would require speculation."
+
+The policy is:
+
+```text
+confirmation high, challenge low, both confident -> confirmed
+confirmation low, challenge high, both confident -> rejected
+otherwise -> uncertain
+```
+
+The decision is stored in `ScoreResult.metadata["decision"]`. The metadata also
+includes confirmation and challenge scores, confidences, thresholds, and a
+human-readable decision reason. Callers can escalate `uncertain` results to a
+human oracle.
+
+---
+
 ## What is a Judge?
 
 The Judge (`JudgeStrategy`) is a holistic evaluator. It scores trajectories
@@ -140,6 +179,11 @@ and calling `router.register_policy(MyPolicy())`.
 - you know the task is verifiable
 - you have ground truth, test cases, or execution outputs
 - you need fine-grained discrimination between close candidates
+
+**Use the Adversarial Verifier directly** when:
+- one trajectory represents a claim that needs confirmation
+- you want an evidence-based challenge before accepting or rejecting the claim
+- uncertain outcomes should trigger human review
 
 **Use the Judge directly** when:
 - evaluation is open-ended or qualitative

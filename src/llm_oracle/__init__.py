@@ -68,6 +68,7 @@ from llm_oracle.routing.router import (
 )
 
 # ── Evaluation strategies ─────────────────────────────────────────────────────
+from llm_oracle.strategies.adversarial import AdversarialDecision, AdversarialVerifierStrategy
 from llm_oracle.strategies.judge import JudgeStrategy
 from llm_oracle.strategies.verifier import VerifierStrategy
 
@@ -111,6 +112,8 @@ __all__ = [
   "get_provider",
   "register_provider",
   # ── Strategies ────────────────────────────────────────────────────────────
+  "AdversarialDecision",
+  "AdversarialVerifierStrategy",
   "VerifierStrategy",
   "JudgeStrategy",
   # ── Harness ───────────────────────────────────────────────────────────────
