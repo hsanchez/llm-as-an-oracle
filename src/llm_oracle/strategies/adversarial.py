@@ -229,9 +229,9 @@ class AdversarialVerifierStrategy(BaseStrategy):
     challenge_result: ScoreResult,
   ) -> AdversarialDecision:
     confirmation_high = confirmation_result.score >= self.confirmation_threshold
-    # The first implementation intentionally uses one threshold for both
-    # "support is strong enough" and "challenge is strong enough". A future
-    # challenge_threshold can be added if use cases need asymmetric tuning.
+    # The first implementation uses one threshold for both "support is strong
+    # enough" and "challenge is strong enough". A future challenge_threshold can
+    # support stricter rejection than confirmation when false rejections are costlier.
     challenge_high = challenge_result.score >= self.confirmation_threshold
     both_confident = (
       confirmation_result.confidence >= self.min_confidence
