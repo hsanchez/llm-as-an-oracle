@@ -39,8 +39,7 @@ class LanguageModel(Protocol):
 class BaseStrategy(abc.ABC):
   """Abstract base class for evaluation strategies.
 
-  Subclasses implement scoring and selection for a specific evaluation approach
-  (verifier or judge).
+  Subclasses implement scoring and selection for a specific evaluation approach.
   """
 
   def __init__(

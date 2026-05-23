@@ -22,6 +22,7 @@ class StrategyType(enum.Enum):
 
   VERIFIER = "verifier"
   JUDGE = "judge"
+  ADVERSARIAL = "adversarial"
 
 
 @dataclass(frozen=True)
@@ -185,5 +186,3 @@ class ScoringConfig:
 TrajectoryList = Sequence[Trajectory]
 ScoreDict = dict[str, float]
 CriterionList = Sequence[EvaluationCriterion]
-
-

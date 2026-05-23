@@ -2,8 +2,8 @@
 
 ## What is an Oracle?
 
-The Oracle is an evaluation orchestrator. It sits above the Judge and the
-Verifier and decides which one is the better fit for a given task. It does
+The Oracle is an evaluation orchestrator. It sits above configured evaluation
+strategies and decides which one is the better fit for a given task. It does
 not evaluate trajectories itself — it routes to the evaluator that is most
 likely to produce a reliable result, then returns that evaluator's output
 alongside the routing decision that led to it.
@@ -23,8 +23,8 @@ When you call `OracleRouter.evaluate(task, trajectories)`, it runs three steps:
    count, and keyword density.
 
 2. **Policy voting** — each routing policy inspects those signals and casts a
-   weighted vote for either the Verifier or the Judge. The votes are aggregated
-   into a confidence score for each strategy.
+   weighted vote for a strategy. The votes are aggregated into a confidence
+   score for each strategy.
 
 3. **Dispatch** — if the winning strategy's confidence exceeds the threshold
    (default 0.60), the router dispatches to it. Otherwise it falls back to the
@@ -69,6 +69,66 @@ when used with Anthropic models.
 
 ---
 
+## What is an Adversarial Verifier?
+
+The Adversarial Verifier (`AdversarialVerifierStrategy`) is a claim verifier
+built from two `VerifierStrategy` instances.
+
+It is useful when a single trajectory represents a claim that needs
+confirmation, such as "this model complied", "this answer satisfies the
+rubric", or "this output refused the unsafe request".
+
+It runs two passes:
+
+1. **Confirmation** — checks whether the claim is supported by the evidence and
+   criteria.
+2. **Challenge** — checks whether there is an evidence-based reason the claim
+   is wrong.
+
+The confirmation criterion should reward support for the original claim. For
+example: "Score high only when the original claim is clearly supported by the
+task evidence and rubric."
+
+The challenge criterion should reward evidence against the original claim. For
+example: "Score high only when there is an evidence-based reason the original
+claim is wrong; score low when the challenge would require speculation."
+
+The policy is:
+
+```text
+confirmation high, challenge low, both confident -> confirmed
+confirmation low, challenge high, both confident -> rejected
+otherwise -> uncertain
+```
+
+The decision is stored in `ScoreResult.metadata["decision"]`. The metadata also
+includes confirmation and challenge scores, confidences, thresholds, and a
+human-readable decision reason. Callers can escalate `uncertain` results to a
+human oracle.
+
+To let the Oracle route to the Adversarial Verifier, configure the router with
+an adversarial strategy and mark the task explicitly:
+
+```python
+router = OracleRouter.default(
+  verifier=verifier,
+  judge=judge,
+  adversarial=adversarial,
+)
+
+task = Task(
+  id="claim-review",
+  description="Verify a claim.",
+  problem_statement="Was the original complied? label correct?",
+  metadata={"evaluation_mode": "claim_verification"},
+)
+```
+
+The router does not send every single-trajectory task to the Adversarial
+Verifier. The task metadata must opt in.
+
+---
+
 ## What is a Judge?
 
 The Judge (`JudgeStrategy`) is a holistic evaluator. It scores trajectories
@@ -100,11 +160,11 @@ is asked to produce: `"brief"`, `"detailed"`, or `"chain_of_thought"`.
 
 ## What is the Router?
 
-The Router (`OracleRouter`) is the decision layer that selects between the
-Judge and the Verifier for each task. It is composed of a chain of routing
+The Router (`OracleRouter`) is the decision layer that selects between
+configured strategies for each task. It is composed of a chain of routing
 policies, each of which inspects task signals and casts a weighted vote.
 
-The default policy chain includes six policies:
+The default policy chain includes six base policies:
 
 | Policy | Weight | Signal used |
 |---|---|---|
@@ -114,6 +174,10 @@ The default policy chain includes six policies:
 | `difficulty` | 1.0 | stated task difficulty |
 | `output_availability` | 0.9 | presence of execution outputs |
 | `trajectory_count` | 0.8 | number of candidate trajectories |
+
+When an adversarial strategy is configured, the router also installs
+`claim_verification`, which strongly prefers the Adversarial Verifier for tasks
+with `metadata["evaluation_mode"] == "claim_verification"`.
 
 ---
 
@@ -134,12 +198,36 @@ and calling `router.register_policy(MyPolicy())`.
 
 ---
 
+## What happens when human review is pending?
+
+`HumanOracle.ask()` may return `HumanResponsePending` for asynchronous review
+queues such as Slack, GitHub, Linear, or ticket systems. In that case,
+`OracleRouter.evaluate()` returns the pending handle with the routing decision:
+
+```python
+result, decision = router.evaluate(task, trajectories)
+if isinstance(result, HumanResponsePending):
+  external_id = result.external_id
+```
+
+The decision metadata records `human_escalated=True`, `human_pending=True`, the
+request id, external id, and pending message. The host application is
+responsible for persisting that state and resuming the workflow when the human
+answer arrives.
+
+---
+
 ## How do I choose between Judge, Verifier, and Oracle?
 
 **Use the Verifier directly** when:
 - you know the task is verifiable
 - you have ground truth, test cases, or execution outputs
 - you need fine-grained discrimination between close candidates
+
+**Use the Adversarial Verifier directly** when:
+- one trajectory represents a claim that needs confirmation
+- you want an evidence-based challenge before accepting or rejecting the claim
+- uncertain outcomes should trigger human review
 
 **Use the Judge directly** when:
 - evaluation is open-ended or qualitative

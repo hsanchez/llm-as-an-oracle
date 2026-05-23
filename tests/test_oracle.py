@@ -24,6 +24,8 @@ from typing import Any, cast
 import pytest
 
 from llm_oracle import (
+  AdversarialDecision,
+  AdversarialVerifierStrategy,
   EvaluationCriterion,
   EvaluationHarness,
   EvaluationResult,
@@ -57,6 +59,7 @@ from llm_oracle.evaluation.harness import (
   _validate_hardness_weights,
 )
 from llm_oracle.routing.router import (
+  ClaimVerificationPolicy,
   DetailedRoutingDecision,
   DifficultyPolicy,
   GroundTruthPolicy,
@@ -164,6 +167,17 @@ def essay_task() -> Task:
 
 
 @pytest.fixture()
+def claim_verification_task() -> Task:
+  return Task(
+    id="task-claim",
+    description="Verify compliance assessment",
+    problem_statement="Confirm whether the original complied? assessment is correct.",
+    difficulty=TaskDifficulty.MEDIUM,
+    metadata={"evaluation_mode": "claim_verification"},
+  )
+
+
+@pytest.fixture()
 def trajectories(easy_task: Task) -> list[Trajectory]:
   return [
     Trajectory(
@@ -210,6 +224,60 @@ def judge(stub_model, scoring_config, criteria) -> JudgeStrategy:
 @pytest.fixture()
 def router(verifier, judge) -> OracleRouter:
   return OracleRouter.default(verifier, judge)
+
+
+def adversarial_verifier(
+  confirmation_score: str,
+  challenge_score: str,
+  scoring_config: ScoringConfig,
+  criteria: list[EvaluationCriterion],
+  *,
+  min_confidence: float = 0.60,
+) -> AdversarialVerifierStrategy:
+  confirmation_verifier = VerifierStrategy(
+    StubProvider(model_id="confirm", default_score=confirmation_score, seed=1),
+    scoring_config,
+    [criteria[0]],
+  )
+  challenge_verifier = VerifierStrategy(
+    StubProvider(model_id="challenge", default_score=challenge_score, seed=2),
+    scoring_config,
+    [criteria[1]],
+  )
+  return AdversarialVerifierStrategy(
+    confirmation_verifier,
+    challenge_verifier,
+    criteria[0],
+    criteria[1],
+    confirmation_threshold=0.65,
+    min_confidence=min_confidence,
+  )
+
+
+def adversarial_verifier_with_responses(
+  confirmation_responses: list[StubResponse],
+  challenge_responses: list[StubResponse],
+  scoring_config: ScoringConfig,
+  criteria: list[EvaluationCriterion],
+) -> AdversarialVerifierStrategy:
+  confirmation_verifier = VerifierStrategy(
+    StubProvider(model_id="confirm", responses=confirmation_responses, seed=1),
+    scoring_config,
+    [criteria[0]],
+  )
+  challenge_verifier = VerifierStrategy(
+    StubProvider(model_id="challenge", responses=challenge_responses, seed=2),
+    scoring_config,
+    [criteria[1]],
+  )
+  return AdversarialVerifierStrategy(
+    confirmation_verifier,
+    challenge_verifier,
+    criteria[0],
+    criteria[1],
+    confirmation_threshold=0.65,
+    min_confidence=0.60,
+  )
 
 
 class TestCoreModels:
@@ -498,6 +566,19 @@ class TestVerifierStrategy:
     assert result.strategy_type == StrategyType.VERIFIER
     assert len(result.pairwise_comparisons) == 0
 
+  def test_evaluate_single_trajectory_preserves_reasoning(
+    self,
+    verifier: VerifierStrategy,
+    easy_task: Task,
+    trajectories: list[Trajectory],
+    criteria: list[EvaluationCriterion],
+  ) -> None:
+    result = verifier.evaluate(easy_task, [trajectories[0]])
+    score_result = result.trajectory_scores[trajectories[0].id]
+
+    assert len(score_result.reasoning) > 0
+    assert f"[{criteria[0].name}]" in score_result.reasoning
+
   def test_evaluate_multiple_trajectories(
     self,
     verifier: VerifierStrategy,
@@ -587,6 +668,315 @@ class TestVerifierStrategy:
     raw_score, confidence = verifier._extract_score_from_logprobs(text, None, None, "<score>")
     assert raw_score == pytest.approx(verifier.config.granularity / 2.0)
     assert confidence == pytest.approx(0.5)
+
+
+class TestAdversarialVerifierStrategy:
+  def test_strategy_type(
+    self,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+  ) -> None:
+    strategy = adversarial_verifier("A", "T", scoring_config, criteria)
+
+    assert strategy.get_strategy_type() == StrategyType.ADVERSARIAL
+
+  def test_rejects_non_verifier_confirmation_strategy(
+    self,
+    judge: JudgeStrategy,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+  ) -> None:
+    challenge_verifier = VerifierStrategy(
+      StubProvider(model_id="challenge", default_score="T", seed=2),
+      scoring_config,
+      [criteria[1]],
+    )
+
+    with pytest.raises(TypeError, match="confirmation_verifier"):
+      AdversarialVerifierStrategy(
+        judge,
+        challenge_verifier,
+        criteria[0],
+        criteria[1],
+      )
+
+  def test_rejects_non_verifier_challenge_strategy(
+    self,
+    judge: JudgeStrategy,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+  ) -> None:
+    confirmation_verifier = VerifierStrategy(
+      StubProvider(model_id="confirm", default_score="A", seed=1),
+      scoring_config,
+      [criteria[0]],
+    )
+
+    with pytest.raises(TypeError, match="challenge_verifier"):
+      AdversarialVerifierStrategy(
+        confirmation_verifier,
+        judge,
+        criteria[0],
+        criteria[1],
+      )
+
+  def test_rejects_mismatched_num_verifications(
+    self,
+    criteria: list[EvaluationCriterion],
+  ) -> None:
+    confirmation_verifier = VerifierStrategy(
+      StubProvider(model_id="confirm", default_score="A", seed=1),
+      ScoringConfig(granularity=20, num_verifications=1, use_logprobs=False),
+      [criteria[0]],
+    )
+    challenge_verifier = VerifierStrategy(
+      StubProvider(model_id="challenge", default_score="T", seed=2),
+      ScoringConfig(granularity=20, num_verifications=2, use_logprobs=False),
+      [criteria[1]],
+    )
+
+    with pytest.raises(ValueError, match="num_verifications"):
+      AdversarialVerifierStrategy(
+        confirmation_verifier,
+        challenge_verifier,
+        criteria[0],
+        criteria[1],
+      )
+
+  def test_rejects_invalid_threshold(
+    self,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+  ) -> None:
+    confirmation_verifier = VerifierStrategy(
+      StubProvider(model_id="confirm", default_score="A", seed=1),
+      scoring_config,
+      [criteria[0]],
+    )
+    challenge_verifier = VerifierStrategy(
+      StubProvider(model_id="challenge", default_score="T", seed=2),
+      scoring_config,
+      [criteria[1]],
+    )
+
+    with pytest.raises(ValueError, match="confirmation_threshold"):
+      AdversarialVerifierStrategy(
+        confirmation_verifier,
+        challenge_verifier,
+        criteria[0],
+        criteria[1],
+        confirmation_threshold=1.5,
+      )
+
+  def test_rejects_invalid_min_confidence(
+    self,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+  ) -> None:
+    confirmation_verifier = VerifierStrategy(
+      StubProvider(model_id="confirm", default_score="A", seed=1),
+      scoring_config,
+      [criteria[0]],
+    )
+    challenge_verifier = VerifierStrategy(
+      StubProvider(model_id="challenge", default_score="T", seed=2),
+      scoring_config,
+      [criteria[1]],
+    )
+
+    with pytest.raises(ValueError, match="min_confidence"):
+      AdversarialVerifierStrategy(
+        confirmation_verifier,
+        challenge_verifier,
+        criteria[0],
+        criteria[1],
+        min_confidence=-0.1,
+      )
+
+  def test_confirmed_claim(
+    self,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    strategy = adversarial_verifier("A", "T", scoring_config, criteria)
+
+    result = strategy.score_trajectory(easy_task, trajectories[0], criteria[0])
+
+    assert result.metadata["decision"] == AdversarialDecision.CONFIRMED.value
+    assert result.score >= strategy.confirmation_threshold
+    assert result.metadata["confirmation_score"] > result.metadata["challenge_score"]
+
+  def test_score_trajectory_rejects_unconfigured_criterion(
+    self,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    strategy = adversarial_verifier("A", "T", scoring_config, criteria)
+    unknown_criterion = EvaluationCriterion(
+      id="unknown",
+      name="Unknown",
+      description="Not configured for this adversarial verifier.",
+    )
+
+    with pytest.raises(ValueError, match="configured adversarial criteria"):
+      strategy.score_trajectory(easy_task, trajectories[0], unknown_criterion)
+
+  def test_rejected_claim(
+    self,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    strategy = adversarial_verifier("T", "A", scoring_config, criteria)
+
+    result = strategy.score_trajectory(easy_task, trajectories[0], criteria[0])
+
+    assert result.metadata["decision"] == AdversarialDecision.REJECTED.value
+    assert result.score < strategy.confirmation_threshold
+    assert result.metadata["challenge_score"] > result.metadata["confirmation_score"]
+
+  def test_uncertain_when_verifiers_disagree(
+    self,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    strategy = adversarial_verifier("A", "A", scoring_config, criteria)
+
+    result = strategy.score_trajectory(easy_task, trajectories[0], criteria[0])
+
+    assert result.metadata["decision"] == AdversarialDecision.UNCERTAIN.value
+    assert "decisive" in result.metadata["decision_reason"]
+
+  def test_uncertain_when_confidence_is_low(
+    self,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    strategy = adversarial_verifier("A", "T", scoring_config, criteria, min_confidence=0.95)
+
+    result = strategy.score_trajectory(easy_task, trajectories[0], criteria[0])
+
+    assert result.metadata["decision"] == AdversarialDecision.UNCERTAIN.value
+    assert "low confidence" in result.metadata["decision_reason"]
+
+  def test_reasoning_preserves_both_passes(
+    self,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    strategy = adversarial_verifier("A", "T", scoring_config, criteria)
+
+    result = strategy.score_trajectory(easy_task, trajectories[0], criteria[0])
+
+    assert "[Confirmation]" in result.reasoning
+    assert "[Challenge]" in result.reasoning
+
+  def test_evaluate_scores_single_claim(
+    self,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    strategy = adversarial_verifier("A", "T", scoring_config, criteria)
+
+    result = strategy.evaluate(easy_task, [trajectories[0]])
+    score_result = result.trajectory_scores[trajectories[0].id]
+
+    assert result.best_trajectory_id == trajectories[0].id
+    assert result.metadata["adversarial"] is True
+    assert result.metadata["num_verifications"] == scoring_config.num_verifications
+    assert score_result.metadata["decision"] == AdversarialDecision.CONFIRMED.value
+
+  def test_evaluate_empty_trajectories_raises(
+    self,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    easy_task: Task,
+  ) -> None:
+    strategy = adversarial_verifier("A", "T", scoring_config, criteria)
+
+    with pytest.raises(ValueError, match="empty trajectory"):
+      strategy.evaluate(easy_task, [])
+
+  def test_score_trajectory_respects_num_verifications(
+    self,
+    criteria: list[EvaluationCriterion],
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    repeated_config = ScoringConfig(
+      granularity=20,
+      num_verifications=2,
+      use_logprobs=False,
+    )
+    strategy = adversarial_verifier_with_responses(
+      confirmation_responses=[StubResponse(score="A"), StubResponse(score="T")],
+      challenge_responses=[StubResponse(score="T"), StubResponse(score="T")],
+      scoring_config=repeated_config,
+      criteria=criteria,
+    )
+
+    result = strategy.score_trajectory(easy_task, trajectories[0], criteria[0])
+
+    assert result.metadata["num_verifications"] == 2
+    assert result.metadata["confirmation_score"] == pytest.approx(0.5)
+    assert result.metadata["challenge_score"] == pytest.approx(0.0)
+    assert "[Pass 1]" in result.reasoning
+    assert "[Pass 2]" in result.reasoning
+
+  def test_compare_trajectories_rejects_unconfigured_criterion(
+    self,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    strategy = adversarial_verifier("A", "T", scoring_config, criteria)
+    unknown_criterion = EvaluationCriterion(
+      id="unknown",
+      name="Unknown",
+      description="Not configured for this adversarial verifier.",
+    )
+
+    with pytest.raises(ValueError, match="configured adversarial criteria"):
+      strategy.compare_trajectories(
+        easy_task,
+        trajectories[0],
+        trajectories[1],
+        unknown_criterion,
+      )
+
+  def test_compare_trajectories_returns_pairwise_comparison(
+    self,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    strategy = adversarial_verifier("A", "T", scoring_config, criteria)
+
+    comparison = strategy.compare_trajectories(
+      easy_task,
+      trajectories[0],
+      trajectories[1],
+      criteria[0],
+    )
+
+    assert comparison.trajectory_a_id == trajectories[0].id
+    assert comparison.trajectory_b_id == trajectories[1].id
+    assert comparison.winner in {trajectories[0].id, trajectories[1].id, None}
 
 
 class TestJudgeStrategy:
@@ -1092,6 +1482,24 @@ class TestSignalExtractor:
     signals = extractor.extract(easy_task, trajectories)
     assert 0.0 <= signals.problem_length <= 1.0
 
+  def test_claim_verification_signal(
+    self,
+    extractor: SignalExtractor,
+    claim_verification_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    signals = extractor.extract(claim_verification_task, [trajectories[0]])
+    assert signals.is_claim_verification == pytest.approx(1.0)
+
+  def test_claim_verification_signal_defaults_to_zero(
+    self,
+    extractor: SignalExtractor,
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    signals = extractor.extract(easy_task, [trajectories[0]])
+    assert signals.is_claim_verification == pytest.approx(0.0)
+
 
 class TestRoutingPolicies:
   """Test each built-in routing policy in isolation."""
@@ -1268,6 +1676,26 @@ class TestRoutingPolicies:
     vote = policy.vote(easy_task, trajectories, signals)
     assert vote.preferred == StrategyType.JUDGE
 
+  def test_claim_verification_policy_prefers_adversarial(
+    self, claim_verification_task: Task, trajectories: list[Trajectory]
+  ) -> None:
+    signals = RoutingSignals(is_claim_verification=1.0)
+    policy = ClaimVerificationPolicy()
+    vote = policy.vote(claim_verification_task, [trajectories[0]], signals)
+
+    assert vote.preferred == StrategyType.ADVERSARIAL
+    assert vote.confidence > 0.9
+
+  def test_claim_verification_policy_abstains_for_normal_task(
+    self, easy_task: Task, trajectories: list[Trajectory]
+  ) -> None:
+    signals = RoutingSignals(is_claim_verification=0.0)
+    policy = ClaimVerificationPolicy()
+    vote = policy.vote(easy_task, [trajectories[0]], signals)
+
+    assert vote.preferred == StrategyType.JUDGE
+    assert vote.confidence == pytest.approx(0.0)
+
   def test_policy_vote_fields(self) -> None:
     vote = PolicyVote(
       policy_name="test",
@@ -1339,6 +1767,25 @@ class TestPolicyChain:
     assert strategy == StrategyType.JUDGE
     assert confidence > 0.5
 
+  def test_adversarial_decision(
+    self, claim_verification_task: Task, trajectories: list[Trajectory]
+  ) -> None:
+    signals = RoutingSignals(is_claim_verification=1.0, trajectory_count=1)
+    chain = PolicyChain(
+      [ClaimVerificationPolicy(), TrajectoryCountPolicy()],
+      confidence_threshold=0.5,
+    )
+
+    strategy, confidence, votes, reasoning = chain.decide(
+      claim_verification_task,
+      [trajectories[0]],
+      signals,
+    )
+
+    assert strategy == StrategyType.ADVERSARIAL
+    assert confidence > 0.5
+    assert "adversarial" in reasoning.lower()
+
   def test_fallback_when_below_threshold(
     self, easy_task: Task, trajectories: list[Trajectory]
   ) -> None:
@@ -1390,6 +1837,19 @@ class TestOracleRouter:
     router = OracleRouter.default(verifier, judge)
     assert isinstance(router, OracleRouter)
     assert len(router._chain.policies) >= 5
+    assert all(policy.name != "claim_verification" for policy in router._chain.policies)
+
+  def test_default_factory_installs_claim_policy_when_adversarial_configured(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+  ) -> None:
+    adversarial = adversarial_verifier("A", "T", scoring_config, criteria)
+    router = OracleRouter.default(verifier, judge, adversarial=adversarial)
+
+    assert any(policy.name == "claim_verification" for policy in router._chain.policies)
 
   def test_verifier_only_factory(self, verifier: VerifierStrategy, judge: JudgeStrategy) -> None:
     router = OracleRouter.verifier_only(verifier, judge)
@@ -1420,6 +1880,36 @@ class TestOracleRouter:
     assert decision.task_id == easy_task.id
     assert decision.selected_strategy in {StrategyType.VERIFIER, StrategyType.JUDGE}
     assert 0.0 <= decision.confidence <= 1.0
+
+  def test_route_claim_verification_to_adversarial_when_configured(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    claim_verification_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    adversarial = adversarial_verifier("A", "T", scoring_config, criteria)
+    router = OracleRouter.default(verifier, judge, adversarial=adversarial)
+
+    decision = router.route(claim_verification_task, [trajectories[0]])
+
+    assert decision.selected_strategy == StrategyType.ADVERSARIAL
+
+  def test_route_normal_single_trajectory_without_adversarial_policy(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    easy_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    router = OracleRouter.default(verifier, judge)
+
+    decision = router.route(easy_task, [trajectories[0]])
+
+    assert decision.selected_strategy in {StrategyType.VERIFIER, StrategyType.JUDGE}
+    assert decision.selected_strategy != StrategyType.ADVERSARIAL
 
   def test_route_populates_signals(
     self,
@@ -1483,11 +1973,41 @@ class TestOracleRouter:
   ) -> None:
     verifier_router = OracleRouter.verifier_only(verifier, judge)
     result, decision = verifier_router.evaluate(easy_task, trajectories)
+    assert isinstance(result, EvaluationResult)
     assert result.strategy_type == StrategyType.VERIFIER
 
     judge_router = OracleRouter.judge_only(verifier, judge)
     result, decision = judge_router.evaluate(easy_task, trajectories)
+    assert isinstance(result, EvaluationResult)
     assert result.strategy_type == StrategyType.JUDGE
+
+  def test_evaluate_dispatches_to_adversarial_strategy(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+    scoring_config: ScoringConfig,
+    criteria: list[EvaluationCriterion],
+    claim_verification_task: Task,
+    trajectories: list[Trajectory],
+  ) -> None:
+    adversarial = adversarial_verifier("A", "T", scoring_config, criteria)
+    router = OracleRouter.default(verifier, judge, adversarial=adversarial)
+
+    result, decision = router.evaluate(claim_verification_task, [trajectories[0]])
+
+    assert decision.selected_strategy == StrategyType.ADVERSARIAL
+    assert isinstance(result, EvaluationResult)
+    assert result.strategy_type == StrategyType.ADVERSARIAL
+
+  def test_resolve_adversarial_without_config_raises(
+    self,
+    verifier: VerifierStrategy,
+    judge: JudgeStrategy,
+  ) -> None:
+    router = OracleRouter.default(verifier, judge)
+
+    with pytest.raises(ValueError, match="no adversarial strategy"):
+      router._resolve_strategy(StrategyType.ADVERSARIAL)
 
   def test_decision_log_accumulates(
     self,
@@ -1839,6 +2359,7 @@ class TestHumanEscalation:
     result, decision = router.evaluate(task_no_clarifications, two_trajectories)
     assert decision.metadata.get("human_escalated") is True
     assert decision.metadata.get("human_response") == "use strict rules"
+    assert isinstance(result, EvaluationResult)
     assert result.task_id == task_no_clarifications.id
 
   def test_unknown_answer_key_raises_value_error(
@@ -1857,7 +2378,7 @@ class TestHumanEscalation:
     with pytest.raises(ValueError, match="unknown-key"):
       router.evaluate(task_with_clarifications, two_trajectories)
 
-  def test_pending_response_raises_runtime_error(
+  def test_pending_response_returns_pending_handle(
     self,
     verifier: VerifierStrategy,
     judge: JudgeStrategy,
@@ -1874,8 +2395,14 @@ class TestHumanEscalation:
       human_oracle=_PendingOracle(),
       uncertainty_threshold=1.1,
     )
-    with pytest.raises(RuntimeError, match="HumanResponsePending"):
-      router.evaluate(task_with_clarifications, two_trajectories)
+    result, decision = router.evaluate(task_with_clarifications, two_trajectories)
+
+    assert isinstance(result, HumanResponsePending)
+    assert result.external_id == "slack-42"
+    assert decision.metadata["human_escalated"] is True
+    assert decision.metadata["human_pending"] is True
+    assert decision.metadata["human_request_id"] == "uncertainty-ambiguous-task"
+    assert decision.metadata["human_pending_external_id"] == "slack-42"
 
   def test_escalation_metadata_in_decision(
     self,
@@ -1921,6 +2448,7 @@ class TestIntegration:
     trajectories: list[Trajectory],
   ) -> None:
     result, decision = router.evaluate(easy_task, trajectories)
+    assert isinstance(result, EvaluationResult)
     assert result.task_id == easy_task.id
     assert result.best_trajectory_id in {t.id for t in trajectories}
     assert decision.selected_strategy in {StrategyType.VERIFIER, StrategyType.JUDGE}

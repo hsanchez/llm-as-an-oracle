@@ -62,6 +62,7 @@ from __future__ import annotations
 from llm_oracle import (
   EvaluationCriterion,
   EvaluationHarness,
+  EvaluationResult,
   JudgeStrategy,
   OracleRouter,
   ScoringConfig,
@@ -374,6 +375,8 @@ print(decision.reasoning)
 
 # %%
 oracle_result, oracle_decision = router.evaluate(task, trajectories)
+if not isinstance(oracle_result, EvaluationResult):
+  raise RuntimeError("Evaluation is waiting on a human response.")
 print("\n# Oracle evaluation:")
 print(f"  strategy:        {oracle_decision.selected_strategy.value}")
 print(f"  best trajectory: {oracle_result.best_trajectory_id}")
@@ -434,6 +437,8 @@ ops_trajectories = [
 
 ops_decision = router.route(ops_task, ops_trajectories)
 ops_result, _ = router.evaluate(ops_task, ops_trajectories)
+if not isinstance(ops_result, EvaluationResult):
+  raise RuntimeError("Evaluation is waiting on a human response.")
 
 print("\n# Open-ended task routing:")
 print(f"  selected:        {ops_decision.selected_strategy.value}  (expected: JUDGE)")

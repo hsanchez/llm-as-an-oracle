@@ -61,6 +61,11 @@ def cmd_info(_args: argparse.Namespace) -> None:
   print()
   _info("Built-in routing policies:")
   policies = [
+    (
+      "ClaimVerificationPolicy",
+      "w=10.0",
+      "Claim verification → adversarial when configured",
+    ),
     ("PriorHardnessPolicy", "w=1.8", "Uses cached harness hardness score"),
     ("GroundTruthPolicy", "w=2.0", "Prefers verifier when ground truth is present"),
     ("KeywordDomainPolicy", "w=1.5", "Code keywords → verifier; essay keywords → judge"),
@@ -74,7 +79,7 @@ def cmd_info(_args: argparse.Namespace) -> None:
 
 
 def cmd_route(args: argparse.Namespace) -> None:
-  """Route a task description to verifier or judge and show the decision."""
+  """Route a task description to a configured strategy and show the decision."""
   oracle = _import_oracle()
 
   task_text: str = args.task
@@ -271,7 +276,7 @@ def build_parser() -> argparse.ArgumentParser:
             Commands
             --------
               info     Print package version and component overview
-              route    Route a task to verifier or judge and inspect the decision
+              route    Route a task to a configured strategy and inspect the decision
               compare  Score a task with both strategies side-by-side
         """),
     formatter_class=argparse.RawDescriptionHelpFormatter,

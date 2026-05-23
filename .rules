@@ -1,3 +1,13 @@
+# Readiness and Synchronization Check
+
+If the user says "are you on?", always:
+1. Re-read this `.rules` file.
+2. Read `MEMORY.md`.
+3. If `MEMORY.md` has no substantive content beyond headings or whitespace, read `MEMORY_LOG.md`.
+4. Also read `MEMORY_LOG.md` when debugging, recovering context, or tracing prior decisions.
+5. When really uncertain about architecture, read `dev-docs/architecture.md` before proceeding
+
+
 # Python coding guidelines
 
 * Prioritize code correctness, clarity, and maintainability. Speed and cleverness are secondary unless explicitly required.
@@ -91,6 +101,8 @@ Override:
 - If the user says "no GitHub issues for this" or "skip issues for this" (current task only):
   - Do not ask for or reference issue numbers
   - Use `PLAN.md` for task tracking instead (create or maintain as needed)
+  - Use `TodoWrite` to track multi-step tasks; check off items as completed — persists within the session only, not to disk
+  - If `TodoWrite` is unavailable, use the closest available session plan tool
 
 # Documentation
 
@@ -169,6 +181,7 @@ These `MEMORY.md` and `MEMORY_LOG.md` files are available to every agent session
   project state and remove the compressed entries from `MEMORY_LOG.md`.
   Compress when `MEMORY_LOG.md` exceeds ~100 entries, or when explicitly asked.
 - Never read or write `MEMORY.local.md` or `MEMORY_LOG.local.md` — those are private human scratch files.
+- **Never write to** `~/.claude/projects/*/memory/MEMORY.md` when a memory discipline is specified in this file.
 
 # Pull request hygiene
 
@@ -230,3 +243,13 @@ Use terse responses by default when technical accuracy would remain intact.
 - Keep code, commands, paths, URLs, version numbers, and other literals unchanged
 - Do not drift back toward verbose prose over time
 - If brevity would hide uncertainty, risk, safety constraints, or important tradeoffs, keep the extra words
+- Prefer `bash` tool for running `uv` commands over explaining them 
+
+# Available Tools
+
+Project tools live in `scripts/`. Run them directly.
+
+- `memlog <message>` — append a timestamped entry to `MEMORY_LOG.md`
+- `review-branch [issue]` — review committed changes on the current branch
+- `review-code` — review uncommitted working-tree changes
+- `gh-issue <issue>` — diagnose a GitHub issue and produce a resolution plan (issue number or URL)

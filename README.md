@@ -19,13 +19,15 @@ In practice, these approaches are best treated as complementary:
 
 - Use `Judge` when evaluation is open-ended, rubric-based, holistic, or subjective.
 - Use `Verifier` when evaluation can be grounded in stronger evidence such as reference solutions, test cases, expected outputs, or execution results.
-- Use the `Oracle` layer when you want an evaluation orchestrator that routes between Judge and Verifier and selects the better evaluation mode for the task.
+- Use `AdversarialVerifier` when a trajectory is a claim that needs confirmation and challenge passes.
+- Use the `Oracle` layer when you want an evaluation orchestrator that routes to the better configured strategy for the task.
 
 This repository therefore treats `LLM-as-an-Oracle` as an orchestration layer:
 
 - it exposes both `Judge` and `Verifier`
+- it supports adversarial claim verification as an optional strategy
 - it compares them in a shared evaluation harness
-- it routes tasks to one or the other based on task signals
+- it routes tasks based on explicit, inspectable task signals
 
 ## Public API
 
@@ -35,6 +37,7 @@ Most users should start with this common import set:
 
 ```python
 from llm_oracle import (
+  AdversarialVerifierStrategy,
   EvaluationCriterion,
   EvaluationHarness,
   JudgeStrategy,
@@ -93,13 +96,14 @@ uv pip install .
 ## How the Oracle Works
 
 `OracleRouter` is a deterministic routing layer that decides whether a task
-should be evaluated by `VerifierStrategy` or `JudgeStrategy`.
+should be evaluated by `VerifierStrategy`, `JudgeStrategy`, or a configured
+`AdversarialVerifierStrategy`.
 
 At a high level, the algorithm does four things:
 
 1. Extract routing signals from the task and trajectories.
 2. Ask a small set of routing policies to cast weighted votes.
-3. Aggregate the votes into Judge-vs-Verifier confidence scores.
+3. Aggregate the votes into per-strategy confidence scores.
 4. Select the winning strategy, or fall back to `Judge` if confidence is too low.
 
 The default router uses these signals:
@@ -110,6 +114,7 @@ The default router uses these signals:
 - stated task difficulty
 - whether execution output is available
 - number of candidate trajectories
+- explicit claim-verification mode in task metadata
 - optional prior hardness from the evaluation harness
 
 The routing process is fully auditable. Each decision includes the extracted
@@ -118,6 +123,86 @@ reasoning trace.
 
 For the full algorithm and policy details, see
 [`docs/oracle-algorithm.md`](docs/oracle-algorithm.md).
+
+## Adversarial Claim Verification
+
+`AdversarialVerifierStrategy` verifies a claim represented by a trajectory. It
+wraps two `VerifierStrategy` instances:
+
+- a confirmation verifier that asks whether the claim is supported
+- a challenge verifier that asks whether evidence supports rejecting the claim
+
+The two passes are controlled by separate criteria:
+
+```python
+confirmation_criterion = EvaluationCriterion(
+  id="claim_supported",
+  name="Claim supported",
+  description=(
+    "Score high only when the original claim is clearly supported by the "
+    "task evidence and rubric. Score low when the evidence does not support "
+    "the claim or the claim requires assumptions not present in the task."
+  ),
+)
+
+challenge_criterion = EvaluationCriterion(
+  id="claim_challenged",
+  name="Claim challenged",
+  description=(
+    "Score high only when there is an evidence-based reason the original "
+    "claim is wrong. Score low when the challenge would require speculation "
+    "or when the original claim is well supported."
+  ),
+)
+```
+
+The decision policy is:
+
+```text
+confirmation high, challenge low, both confident -> confirmed
+confirmation low, challenge high, both confident -> rejected
+otherwise -> uncertain
+```
+
+Use it directly when every trajectory is already a claim to verify:
+
+```python
+confirmation_verifier = VerifierStrategy(model, confirmation_config, [confirmation_criterion])
+challenge_verifier = VerifierStrategy(model, challenge_config, [challenge_criterion])
+
+adversarial = AdversarialVerifierStrategy(
+  confirmation_verifier=confirmation_verifier,
+  challenge_verifier=challenge_verifier,
+  confirmation_criterion=confirmation_criterion,
+  challenge_criterion=challenge_criterion,
+)
+
+result = adversarial.evaluate(task, [trajectory])
+decision = result.trajectory_scores[trajectory.id].metadata["decision"]
+```
+
+To use it through the Oracle, pass it as the optional adversarial strategy and
+mark claim-verification tasks explicitly:
+
+```python
+router = OracleRouter.default(
+  verifier=verifier,
+  judge=judge,
+  adversarial=adversarial,
+)
+
+task = Task(
+  id="claim-review",
+  description="Verify a claim.",
+  problem_statement="Was the original complied? label correct?",
+  metadata={"evaluation_mode": "claim_verification"},
+)
+```
+
+The router only considers the adversarial strategy when it is configured and
+the task metadata explicitly marks the task as claim verification. Ordinary
+single-trajectory tasks continue through the existing Judge/Verifier routing
+path.
 
 ## Evaluation Metrics
 
@@ -149,7 +234,8 @@ At the harness level, `EvaluationHarness` computes:
 - `Trajectory`: a candidate task-solving attempt, including the model's produced solution and any associated outputs or intermediate steps used for evaluation.
 - `Judge`: an evaluator that scores or ranks trajectories holistically, usually with rubric-based or preference-based reasoning.
 - `Verifier`: an evaluator that scores trajectories using a more structured verification process, often grounded in criteria decomposition, repeated verification, reference solutions, test cases, or execution evidence.
-- `Oracle`: the orchestration layer that routes between Judge and Verifier and selects the better evaluation mode for the task.
+- `AdversarialVerifier`: an evaluator that verifies a claim through confirmation and challenge passes.
+- `Oracle`: the orchestration layer that routes to the better configured evaluation mode for the task.
 
 ## CLI USAGE
 

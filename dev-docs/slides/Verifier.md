@@ -137,7 +137,7 @@ But the Verifier is only half the picture — it assumes evidence exists.
 git clone https://github.com/hsanchez/llm-as-an-oracle.git
 cd llm-as-an-oracle
 uv sync
-uv run python examples/02_llm_as_an_oracle_tutorial.py
+uv run python examples/02_live_provider_tutorial.py
 ```
 
 What the demo shows:
