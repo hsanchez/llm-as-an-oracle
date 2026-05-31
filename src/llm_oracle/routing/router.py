@@ -145,6 +145,22 @@ class RoutingPolicy(abc.ABC):
   ) -> PolicyVote:
     """Cast a routing vote for the preferred strategy."""
 
+  def make_vote(
+    self,
+    preferred: StrategyType,
+    confidence: float,
+    reasoning: str,
+    signals_used: list[str] | None = None,
+  ) -> PolicyVote:
+    return PolicyVote(
+      policy_name=self.name,
+      preferred=preferred,
+      confidence=confidence,
+      weight=self.weight,
+      signals_used=signals_used or [],
+      reasoning=reasoning,
+    )
+
   def __repr__(self) -> str:
     return f"{self.__class__.__name__}(name={self.name!r}, weight={self.weight})"
 
@@ -167,24 +183,21 @@ class GroundTruthPolicy(RoutingPolicy):
     signals: RoutingSignals,
   ) -> PolicyVote:
     verifier_score = signals.has_ground_truth * 0.5 + signals.has_test_cases * 0.5
+    signals_used = ["has_ground_truth", "has_test_cases"]
     if verifier_score >= 0.5:
-      return PolicyVote(
-        policy_name=self.name,
+      return self.make_vote(
         preferred=StrategyType.VERIFIER,
         confidence=0.6 + verifier_score * 0.4,
-        weight=self.weight,
-        signals_used=["has_ground_truth", "has_test_cases"],
+        signals_used=signals_used,
         reasoning=(
           "Ground-truth reference or formal test cases are available; "
           "the verifier can leverage them for precise logprob scoring."
         ),
       )
-    return PolicyVote(
-      policy_name=self.name,
+    return self.make_vote(
       preferred=StrategyType.JUDGE,
       confidence=0.55,
-      weight=self.weight,
-      signals_used=["has_ground_truth", "has_test_cases"],
+      signals_used=signals_used,
       reasoning=(
         "No ground-truth or test cases present; the judge's rubric-based "
         "holistic reasoning is better suited to this open-ended evaluation."
@@ -213,14 +226,12 @@ class KeywordDomainPolicy(RoutingPolicy):
     judgment_density = signals.judgment_keyword_density
     gap = verifiable_density - judgment_density
 
+    signals_used = ["verifiable_keyword_density", "judgment_keyword_density"]
     if gap > 0.05:
-      confidence = min(0.95, 0.6 + gap * 2.0)
-      return PolicyVote(
-        policy_name=self.name,
+      return self.make_vote(
         preferred=StrategyType.VERIFIER,
-        confidence=confidence,
-        weight=self.weight,
-        signals_used=["verifiable_keyword_density", "judgment_keyword_density"],
+        confidence=min(0.95, 0.6 + gap * 2.0),
+        signals_used=signals_used,
         reasoning=(
           f"Problem statement has stronger verifiable-domain signal "
           f"(Δ={gap:.2f}); routing to verifier."
@@ -228,25 +239,20 @@ class KeywordDomainPolicy(RoutingPolicy):
       )
 
     if gap < -0.05:
-      confidence = min(0.95, 0.6 + abs(gap) * 2.0)
-      return PolicyVote(
-        policy_name=self.name,
+      return self.make_vote(
         preferred=StrategyType.JUDGE,
-        confidence=confidence,
-        weight=self.weight,
-        signals_used=["verifiable_keyword_density", "judgment_keyword_density"],
+        confidence=min(0.95, 0.6 + abs(gap) * 2.0),
+        signals_used=signals_used,
         reasoning=(
           f"Problem statement has stronger open-ended-domain signal "
           f"(Δ={gap:.2f}); routing to judge."
         ),
       )
 
-    return PolicyVote(
-      policy_name=self.name,
+    return self.make_vote(
       preferred=StrategyType.JUDGE,
       confidence=0.52,
-      weight=self.weight,
-      signals_used=["verifiable_keyword_density", "judgment_keyword_density"],
+      signals_used=signals_used,
       reasoning="Keyword signals are ambiguous; defaulting to judge.",
     )
 
@@ -270,35 +276,30 @@ class DifficultyPolicy(RoutingPolicy):
   ) -> PolicyVote:
     difficulty = task.difficulty
 
+    signals_used = ["stated_difficulty"]
     if difficulty == TaskDifficulty.EASY:
-      return PolicyVote(
-        policy_name=self.name,
+      return self.make_vote(
         preferred=StrategyType.JUDGE,
         confidence=0.65,
-        weight=self.weight,
-        signals_used=["stated_difficulty"],
+        signals_used=signals_used,
         reasoning="Task is marked EASY; the judge's lower overhead is preferred.",
       )
 
     if difficulty == TaskDifficulty.HARD:
-      return PolicyVote(
-        policy_name=self.name,
+      return self.make_vote(
         preferred=StrategyType.VERIFIER,
         confidence=0.72,
-        weight=self.weight,
-        signals_used=["stated_difficulty"],
+        signals_used=signals_used,
         reasoning=(
           "Task is marked HARD; the verifier's granular multi-pass scoring "
           "is more robust for difficult evaluations."
         ),
       )
 
-    return PolicyVote(
-      policy_name=self.name,
+    return self.make_vote(
       preferred=StrategyType.VERIFIER,
       confidence=0.55,
-      weight=self.weight,
-      signals_used=["stated_difficulty"],
+      signals_used=signals_used,
       reasoning=(
         f"Task difficulty is {difficulty.value}; applying slight verifier "
         "preference as the more thorough option."
@@ -327,13 +328,12 @@ class TrajectoryCountPolicy(RoutingPolicy):
   ) -> PolicyVote:
     trajectory_count = signals.trajectory_count
 
+    signals_used = ["trajectory_count"]
     if trajectory_count == 1:
-      return PolicyVote(
-        policy_name=self.name,
+      return self.make_vote(
         preferred=StrategyType.JUDGE,
         confidence=0.60,
-        weight=self.weight,
-        signals_used=["trajectory_count"],
+        signals_used=signals_used,
         reasoning=(
           "Only one trajectory to evaluate; the verifier's pairwise "
           "tournament adds no value — judge is more efficient."
@@ -341,24 +341,20 @@ class TrajectoryCountPolicy(RoutingPolicy):
       )
 
     if 2 <= trajectory_count <= 4:
-      return PolicyVote(
-        policy_name=self.name,
+      return self.make_vote(
         preferred=StrategyType.VERIFIER,
         confidence=0.58,
-        weight=self.weight,
-        signals_used=["trajectory_count"],
+        signals_used=signals_used,
         reasoning=(
           f"{trajectory_count} trajectories available; verifier's pairwise tournament "
           "can effectively discriminate between them."
         ),
       )
 
-    return PolicyVote(
-      policy_name=self.name,
+    return self.make_vote(
       preferred=StrategyType.JUDGE,
       confidence=0.62,
-      weight=self.weight,
-      signals_used=["trajectory_count"],
+      signals_used=signals_used,
       reasoning=(
         f"{trajectory_count} trajectories would require "
         f"{trajectory_count * (trajectory_count - 1) // 2} pairwise calls "
@@ -389,50 +385,41 @@ class PriorHardnessPolicy(RoutingPolicy):
   ) -> PolicyVote:
     hardness = signals.prior_hardness
 
+    signals_used = ["prior_hardness"]
     if hardness is None:
-      return PolicyVote(
-        policy_name=self.name,
+      return self.make_vote(
         preferred=StrategyType.JUDGE,
         confidence=0.51,
-        weight=self.weight,
-        signals_used=["prior_hardness"],
+        signals_used=signals_used,
         reasoning="No prior hardness data available; abstaining (weak judge default).",
       )
 
     if hardness < 0.35:
-      confidence = 0.65 + (0.35 - hardness) * 0.5
-      return PolicyVote(
-        policy_name=self.name,
+      return self.make_vote(
         preferred=StrategyType.JUDGE,
-        confidence=min(0.92, confidence),
-        weight=self.weight,
-        signals_used=["prior_hardness"],
+        confidence=min(0.92, 0.65 + (0.35 - hardness) * 0.5),
+        signals_used=signals_used,
         reasoning=(
           f"Prior hardness {hardness:.3f} is low; the judge is sufficiently accurate and faster."
         ),
       )
 
     if hardness >= 0.60:
-      confidence = 0.65 + (hardness - 0.60) * 0.5
-      return PolicyVote(
-        policy_name=self.name,
+      return self.make_vote(
         preferred=StrategyType.VERIFIER,
-        confidence=min(0.95, confidence),
-        weight=self.weight,
-        signals_used=["prior_hardness"],
+        confidence=min(0.95, 0.65 + (hardness - 0.60) * 0.5),
+        signals_used=signals_used,
         reasoning=(
           f"Prior hardness {hardness:.3f} is high; the verifier's repeated "
           "multi-criterion verification is more reliable on hard tasks."
         ),
       )
 
-    return PolicyVote(
-      policy_name=self.name,
+    return self.make_vote(
       preferred=StrategyType.VERIFIER,
       confidence=0.56,
-      weight=self.weight,
-      signals_used=["prior_hardness"],
-      reasoning=(f"Prior hardness {hardness:.3f} is mid-range; slight verifier preference."),
+      signals_used=signals_used,
+      reasoning=f"Prior hardness {hardness:.3f} is mid-range; slight verifier preference.",
     )
 
 
@@ -448,25 +435,22 @@ class ClaimVerificationPolicy(RoutingPolicy):
     trajectories: TrajectoryList,
     signals: RoutingSignals,
   ) -> PolicyVote:
+    signals_used = ["is_claim_verification"]
     if signals.is_claim_verification >= 1.0:
-      return PolicyVote(
-        policy_name=self.name,
+      return self.make_vote(
         preferred=StrategyType.ADVERSARIAL,
         confidence=0.95,
-        weight=self.weight,
-        signals_used=["is_claim_verification"],
+        signals_used=signals_used,
         reasoning=(
           "Task metadata marks this as claim verification; adversarial "
           "confirmation/challenge evaluation is preferred."
         ),
       )
 
-    return PolicyVote(
-      policy_name=self.name,
+    return self.make_vote(
       preferred=StrategyType.JUDGE,
       confidence=0.0,
-      weight=self.weight,
-      signals_used=["is_claim_verification"],
+      signals_used=signals_used,
       reasoning="Task is not marked for claim verification; policy abstains.",
     )
 
@@ -488,24 +472,21 @@ class OutputAvailabilityPolicy(RoutingPolicy):
     trajectories: TrajectoryList,
     signals: RoutingSignals,
   ) -> PolicyVote:
+    signals_used = ["output_available"]
     if signals.output_available >= 0.5:
-      return PolicyVote(
-        policy_name=self.name,
+      return self.make_vote(
         preferred=StrategyType.VERIFIER,
         confidence=0.65,
-        weight=self.weight,
-        signals_used=["output_available"],
+        signals_used=signals_used,
         reasoning=(
           "Execution outputs are present; the verifier can leverage them "
           "as concrete evidence during logprob scoring."
         ),
       )
-    return PolicyVote(
-      policy_name=self.name,
+    return self.make_vote(
       preferred=StrategyType.JUDGE,
       confidence=0.57,
-      weight=self.weight,
-      signals_used=["output_available"],
+      signals_used=signals_used,
       reasoning=(
         "No execution outputs available; judge's reasoning over trajectory intent is preferred."
       ),
@@ -747,8 +728,7 @@ class OracleRouter:
       name = "always_verifier"
 
       def vote(self, task, trajectories, signals):  # type: ignore[override]
-        return PolicyVote(
-          policy_name=self.name,
+        return self.make_vote(
           preferred=StrategyType.VERIFIER,
           confidence=1.0,
           reasoning="Forced verifier routing (ablation mode).",
@@ -769,8 +749,7 @@ class OracleRouter:
       name = "always_judge"
 
       def vote(self, task, trajectories, signals):  # type: ignore[override]
-        return PolicyVote(
-          policy_name=self.name,
+        return self.make_vote(
           preferred=StrategyType.JUDGE,
           confidence=1.0,
           reasoning="Forced judge routing (ablation mode).",

@@ -49,6 +49,21 @@ _VERDICT_PATTERN = re.compile(
 )
 
 
+def _reference_block(ground_truth: str | None, *, usage_note: bool = False) -> str:
+  if not ground_truth:
+    return ""
+  note = (
+    "Use the reference to verify factual correctness where applicable.\n\n" if usage_note else "\n"
+  )
+  return f"**Reference Solution:**\n```\n{ground_truth}\n```\n{note}"
+
+
+def _execution_output_block(output: str | None) -> str:
+  if not output:
+    return ""
+  return f"\n**Execution Output:**\n```\n{output}\n```"
+
+
 class JudgeStrategy(BaseStrategy):
   """LLM-as-a-Judge evaluation strategy.
 
@@ -248,16 +263,8 @@ class JudgeStrategy(BaseStrategy):
     rubric_lines = "\n".join(f"  {score}: {desc}" for score, desc in _RUBRIC_ANCHORS.items())
     reasoning_instruction = self._reasoning_instruction()
 
-    reference_block = ""
-    if task.ground_truth:
-      reference_block = (
-        f"**Reference Solution:**\n```\n{task.ground_truth}\n```\n"
-        "Use the reference to verify factual correctness where applicable.\n\n"
-      )
-
-    output_block = ""
-    if trajectory.output:
-      output_block = f"\n**Execution Output:**\n```\n{trajectory.output}\n```"
+    reference_block = _reference_block(task.ground_truth, usage_note=True)
+    output_block = _execution_output_block(trajectory.output)
 
     return f"""You are an impartial expert judge evaluating an AI agent's work.
 
@@ -293,17 +300,13 @@ Do not include any text inside the tags other than the number."""
   ) -> str:
     reasoning_instruction = self._reasoning_instruction()
 
-    reference_block = ""
-    if task.ground_truth:
-      reference_block = f"**Reference Solution:**\n```\n{task.ground_truth}\n```\n\n"
-
-    output_a_block = ""
-    if trajectory_a.output:
-      output_a_block = f"\n**Output A:**\n```\n{trajectory_a.output}\n```"
-
-    output_b_block = ""
-    if trajectory_b.output:
-      output_b_block = f"\n**Output B:**\n```\n{trajectory_b.output}\n```"
+    reference_block = _reference_block(task.ground_truth)
+    output_a_block = (
+      f"\n**Output A:**\n```\n{trajectory_a.output}\n```" if trajectory_a.output else ""
+    )
+    output_b_block = (
+      f"\n**Output B:**\n```\n{trajectory_b.output}\n```" if trajectory_b.output else ""
+    )
 
     return f"""You are an impartial expert judge comparing two AI agent trajectories.
 
